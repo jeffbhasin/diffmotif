@@ -1,4 +1,4 @@
 Rmotif
 ======
 
-Tools for Differential analysis of motif patterns
+Tools for differential analysis of motif patterns
