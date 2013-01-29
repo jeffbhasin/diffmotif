@@ -9,6 +9,7 @@
 
 #Sequences in which to find motifs (FASTA)
 seq.path <- "../RunMEME/ColonSeqGR2012/CIMPHyperMe.fasta"
+genome.path <- "../RunMEME/ColonSeqGR2012/hg18.fa"
 
 #filter of q values from FIMO output
 q.cutoff <- 0.01
@@ -22,13 +23,14 @@ library(reshape)
 library(foreach)
 library(doMC)
 registerDoMC(15)
+library(stringr)
 
 ###############################################
 ## Functions
 ###############################################
 runFIMO <- function(runname,fasta.path,motifs.path)
 {
-	system(paste("fimo -oc fimo_out_",runname," ",motifs.path," ",fasta.path," &> fimo_log_",runname,".txt"),sep="")
+	system(paste("fimo -oc output/fimo_out_",runname," ",motifs.path," ",fasta.path," &> output/fimo_log_",runname,".txt",sep=""))
 }
 
 readFIMO <- function(fimo.out.path)
@@ -113,14 +115,71 @@ calcMotifCounts <- function(fimo.out, q.cutoff)
 	mat
 }
 
-drawBackgroundSet <- function()
+drawBackgroundSet <- function(seq,nSimSeqs=10000,windowSize=50)
 {
-	#TODO
+	#input: sequence set of originals read in from FASTA as a DNAStringSet
+	#output: drawn background sequence as DNAStringSet
+
+	#TODO: fix bug if chr freq = 0
+
+	#create distribution of sequences sizes for simulated set by drawing from real set
+	sim.sizes <- sample(width(seq) + windowSize, nSimSeqs, replace=TRUE)
+
+	#draw chr assignments for sim seqs
+
+	#parse out chr names and positions from string set names
+	#TODO: should take an annotation data frame with chr/start/end rather than parsing from the DNAStringSet names (this should be done by the user in the main body code depending on how they have it formatted)
+	seq.chr.names <- str_split_fixed(names(seq),"-",n=3)[,1]
+	seq.chr.starts <- str_split_fixed(names(seq),"-",n=3)[,2]
+	seq.chr.ends <- str_split_fixed(names(seq),"-",n=3)[,3]
+	seq.annot <- data.frame(chr=seq.chr.names,start=seq.chr.starts,end=seq.chr.ends,stringsAsFactors=FALSE)
+
+	#find max end point for any seq on each chr in set
+	seq.chr.range.max <- by(seq.annot, seq.annot$chr, function(x) max(x$end))
+	#count number of seqs from each chr in set
+	seq.chr.table <- table(seq.annot$chr)
+
+	#make random draws of chr names for the simulated seq set using frequencies from the actual set
+	sim.chrs <- sample(names(seq.chr.table), nSimSeqs, replace=TRUE, prob=as.vector(seq.chr.table)/sum(seq.chr.table))
+
+	#data frame of chr frequencies in simulated set we just drew and max end points for each chr
+	sim.chr.meta <- data.frame(cbind(freq=as.vector(table(sim.chrs)), max=seq.chr.range.max))
+
+	#make random draw of chr positions - for each chr, draw a position for each seq from all integers from 1 to the max endpoint seen in the real data
+	sim.pos <- apply(sim.chr.meta, 1, function(x) sample.int(x[2], x[1]))
+
+	sim.chr.names <- row.names(sim.chr.meta)
+	sim.chr.freqs <- as.vector(sim.chr.meta$freq)
+
+	#generate the corresponding chr names for each simulated position (repeat the chr name by the freq in the simulated draw)
+	sim.pos.chrs <- sapply(seq(sim.chr.freqs), function(x, sim.chr.names, sim.chr.freqs) rep(sim.chr.names[x], sim.chr.freqs[x]), sim.chr.names=sim.chr.names, sim.chr.freqs=sim.chr.freqs)
+
+	#build data frame with position information for the simulated seq draws
+	sim.annot <- data.frame(chr=unlist(sim.pos.chrs), end=unlist(sim.pos), stringsAsFactors=FALSE)
+	
+	#create start points by subtracting the random draws of sizes from the end points
+	sim.annot <- data.frame(sim.annot, start=sim.annot$end-sim.sizes, stringsAsFactors=FALSE)
+	sim.annot <- data.frame(chr=sim.annot$chr, start=sim.annot$start, end=sim.annot$end, stringsAsFactors=FALSE)
+
+	#add a col with an ID number
+	sim.annot <- cbind(sim.annot, id=seq(nrow(sim.annot)))
+
+	#write simulated sequences to FASTA
+
+	#make bed file of simulated draw positions
+	sim.bed <- data.frame(chr=sim.annot$chr,start=sim.annot$start,end=sim.annot$end)
+	sim.bed[sim.bed$start<0,]$start <- 0
+	write.table(sim.bed,file="output/simseq.bed",sep="\t",row.names=FALSE,col.names=FALSE,quote=FALSE)
+	system(paste("fastaFromBed -fi ",genome.path," -bed output/simseq.bed -fo output/simseq.fasta",sep=""))
+	system("sed -i 's/:/-/' output/simseq.fasta")
+
+	sim.seq <- readDNAStringSet("output/simseq.fasta")
+	sim.seq
 }
 
 shuffleBackgroundSet <- function()
 {
-	#TODO
+	#TODO - dinucleotide shuffle of seqs to make the background set
 }
 
 ###############################################
@@ -146,26 +205,26 @@ fimo.out.counts <- calcMotifCounts(fimo.out,q.cutoff)
 ###############################################
 ## Generate Background Sequence Set
 ###############################################
-#calcMotifFreqs(fimo.out.sim)
-#nSimSeqs <- 10000
-
+sim.seq <- drawBackgroundSet(seq,10000)
+sim.nSeqs <- length(sim.seq)
 
 ###############################################
 ## Run FIMO on Background Sequences
 ###############################################
-#system("fimo ")
+runFIMO("sim","output/simseq.fasta","../TRANSFAC/ConvertToMEME/TRAJAS.Human.named.meme")
+fimo.out.sim <- readFIMO("output/fimo_out_sim/fimo.txt")
 
 ###############################################
 ## Perform Enrichment Test
 ###############################################
 
 #just going to load in some other seq set for now
-fimo.out.sim.path <- "../RunMEME/FIMORun/fimo_out_AllHyperMe/fimo.txt"
-fimo.out.sim <- readFIMO(fimo.out.sim.path)
-fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
-seq.path2 <- "../RunMEME/ColonSeqGR2012/AllHyperMe.fasta"
-seq2 <- readDNAStringSet(seq.path2)
-nSeqs2 <- length(seq2)
+#fimo.out.sim.path <- "../RunMEME/FIMORun/fimo_out_AllHyperMe/fimo.txt"
+#fimo.out.sim <- readFIMO(fimo.out.sim.path)
 
-results <- calcEnrichmentBinom(fimo.out.counts,nSeqs,fimo.out.sim.counts,nSeqs2)
+fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
+#seq.path2 <- "../RunMEME/ColonSeqGR2012/AllHyperMe.fasta"
+#seq2 <- readDNAStringSet(seq.path2)
+
+results <- calcEnrichmentBinom(fimo.out.counts,nSeqs,fimo.out.sim.counts,sim.nSeqs)
 results <- results[order(results$pvalue, decreasing=FALSE),]
