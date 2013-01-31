@@ -224,12 +224,25 @@ shuffleBackgroundSet <- function(seq)
 
 shuffleDinucleotides <- function(seq)
 {
-
+	#TODO make it apply over whole DNAStringSet object
+	uShuffle()
 }
 
-uShuffle <- function()
+uShuffle <- function(string, klet)
 {
+	dyn.load("uShuffle/ushuffle.so")
 	
+	#input string
+	s <- as.character(string)
+	#output string
+	t <- as.character(string)
+	#length of string
+	l <- as.integer(nchar(string))
+	#k-let size to use
+	k <- as.integer(klet)
+
+	cdata <- .C("rshuffle", s=s, t=t, l=l, k=k)
+	cdata$t
 }
 
 ###############################################

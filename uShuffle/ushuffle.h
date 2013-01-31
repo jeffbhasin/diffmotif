@@ -31,6 +31,8 @@
  *	Mon Apr 23 14:35:21 MDT 2007
  */
 
+void rshuffle(char **s, char **t, int *l, int *k);
+
 void shuffle(const char *s, char *t, int l, int k);
 void shuffle1(const char *s, int l, int k);
 void shuffle2(char *t);

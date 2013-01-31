@@ -273,3 +273,15 @@ void shuffle(const char *s, char *t, int l, int k) {
 	shuffle1(s, l, k);
 	shuffle2(t);
 }
+
+void rshuffle(char **s, char **t, int *l, int *k)
+{
+	int l2 = *l;
+	int k2 = *k;
+	const char* s2 = *s;
+	char* t2 = *t;
+
+	/*printf("l: %i k: %i s: %s t: %s\n",l2,k2,s2,t2);*/
+	
+	shuffle(s2,t2,l2,k2);
+}
