@@ -225,7 +225,8 @@ shuffleBackgroundSet <- function(seq)
 shuffleDinucleotides <- function(seq)
 {
 	#TODO make it apply over whole DNAStringSet object
-	uShuffle()
+	new <- unlist(lapply(seq,FUN=uShuffle,klet=2))
+	DNAStringSet(new)
 }
 
 uShuffle <- function(string, klet)
