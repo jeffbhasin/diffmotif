@@ -210,7 +210,21 @@ shuffleBackgroundSet <- function(seq)
 	#input: DNSStringSet of query seqs to shuffle
 	#output: DNAStringSet of shuffled seqs
 	
-	
+	#preserves nucleotide ratios exactly
+
+	doShuf <- function(x)
+	{
+		x <- DNAString(as.character(x))
+		shuf <- x[sample(length(x))]
+		as.character(shuf)
+	}
+	new <- unlist(lapply(seq,FUN=doShuf))
+	DNAStringSet(new)
+}
+
+shuffleDinucleotides <- function(seq)
+{
+	#same one that DREME implements?
 }
 
 ###############################################
