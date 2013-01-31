@@ -12,7 +12,7 @@ seq.path <- "../RunMEME/ColonSeqGR2012/CIMPHyperMe.fasta"
 genome.path <- "../RunMEME/ColonSeqGR2012/hg18.fa"
 
 #filter of q values from FIMO output
-q.cutoff <- 0.01
+q.cutoff <- 0.05
 
 ###############################################
 ## Libraries
@@ -197,7 +197,7 @@ fimo.out.path <- "../RunMEME/FIMORun/fimo_out_CIMPHyperMe/fimo.txt"
 ###############################################
 
 #load FIMO text output file
-fimo.out <- read.table(file=fimo.out.path,header=TRUE,comment.char="",sep="\t")
+fimo.out <- readFIMO(fimo.out.path)
 
 #build matrix of motif occurance counts for each sequence
 fimo.out.counts <- calcMotifCounts(fimo.out,q.cutoff)
@@ -227,4 +227,6 @@ fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
 #seq2 <- readDNAStringSet(seq.path2)
 
 results <- calcEnrichmentBinom(fimo.out.counts,nSeqs,fimo.out.sim.counts,sim.nSeqs)
-results <- results[order(results$pvalue, decreasing=FALSE),]
+results.sort <- results[order(results$pvalue, decreasing=FALSE),]
+head(results.sort)
+tail(results.sort)
