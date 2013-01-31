@@ -224,7 +224,12 @@ shuffleBackgroundSet <- function(seq)
 
 shuffleDinucleotides <- function(seq)
 {
-	#same one that DREME implements?
+
+}
+
+uShuffle <- function()
+{
+	
 }
 
 ###############################################
