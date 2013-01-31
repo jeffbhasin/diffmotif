@@ -177,9 +177,40 @@ drawBackgroundSet <- function(seq,nSimSeqs=10000,windowSize=50)
 	sim.seq
 }
 
-shuffleBackgroundSet <- function()
+
+drawBackgroundSetFromRegions <- function()
 {
-	#TODO - dinucleotide shuffle of seqs to make the background set
+	#TODO - draw a background set only from another sequence database (FASTA)
+}
+
+
+drawBackgroundSetResampled <- function()
+{
+	#TODO - draw a background set using importance based resampling to match by both length and GC content
+}
+
+randomBackgroundSet <- function(seq)
+{
+	#create background set with same base frequencies as input set
+
+	doRandom <- function(x)
+	{
+		freq <- alphabetFrequency(x)[1:4]
+		rand <- paste(sample(c("A", "C", "G", "T"), length(x), replace=TRUE, prob=freq), collapse="")
+		#DNAString(rand)
+		rand
+	}
+	new <- unlist(lapply(seq,FUN=doRandom))
+	DNAStringSet(new)
+}
+
+shuffleBackgroundSet <- function(seq)
+{
+	#TODO - shuffle of seqs to make the background set
+	#input: DNSStringSet of query seqs to shuffle
+	#output: DNAStringSet of shuffled seqs
+	
+	
 }
 
 ###############################################
