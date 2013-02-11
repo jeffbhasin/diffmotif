@@ -132,9 +132,6 @@ drawBackgroundSetFromRegions <- function(seq,regions,nSimSeqs=10000,windowSize=5
 	sim.seq
 }
 
-
-
-
 drawBackgroundSetResampled <- function()
 {
 	#TODO - draw a background set using importance based resampling to match by both length and GC content
