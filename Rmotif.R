@@ -17,7 +17,7 @@ library(stringr)
 ###############################################
 runFIMO <- function(runname,fasta.path,motifs.path)
 {
-	system(paste("fimo -oc output/fimo_out_",runname," ",motifs.path," ",fasta.path," &> output/fimo_log_",runname,".txt",sep=""))
+	system(paste("fimo -oc output/fimo_out_",runname," ",motifs.path," ",fasta.path,sep=""))
 }
 
 readFIMO <- function(fimo.out.path)
@@ -35,6 +35,8 @@ drawBackgroundSet <- function(seq,nSimSeqs=10000,windowSize=50)
 	#output: drawn background sequence as DNAStringSet
 
 	#TODO: fix bug if chr freq = 0
+
+	genome.path <- "../RunMEME/ColonSeqGR2012/hg18.fa"
 
 	#create distribution of sequences sizes for simulated set by drawing from real set
 	sim.sizes <- sample(width(seq) + windowSize, nSimSeqs, replace=TRUE)
@@ -82,7 +84,7 @@ drawBackgroundSet <- function(seq,nSimSeqs=10000,windowSize=50)
 
 	#make bed file of simulated draw positions
 	sim.bed <- data.frame(chr=sim.annot$chr,start=sim.annot$start,end=sim.annot$end)
-	sim.bed[sim.bed$start<0,]$start <- 0
+	#sim.bed[sim.bed$start<0,]$start <- 0
 	write.table(sim.bed,file="output/simseq.bed",sep="\t",row.names=FALSE,col.names=FALSE,quote=FALSE)
 	system(paste("fastaFromBed -fi ",genome.path," -bed output/simseq.bed -fo output/simseq.fasta",sep=""))
 	system("sed -i 's/:/-/' output/simseq.fasta")
@@ -92,10 +94,45 @@ drawBackgroundSet <- function(seq,nSimSeqs=10000,windowSize=50)
 }
 
 
-drawBackgroundSetFromRegions <- function()
+drawBackgroundSetFromRegions <- function(seq,regions,nSimSeqs=10000,windowSize=50)
 {
-	#TODO - draw a background set only from another sequence database (FASTA)
+	#input: sequence set to generate background for, regions dataframe with regions to draw background from
+	#output: background set of nearest matching size sequences from supplied regions list
+	#TODO
+
+	sim.sizes <- sample(width(seq) + windowSize, nSimSeqs, replace=TRUE)
+
+	sim.sizes.table <- table(sim.sizes)
+
+	background.out <- data.frame()
+	for (size in names(sim.sizes.table))
+	{
+		cat(size)
+		sub1 <- subset(regions, subset=(end-start+windowSize)==as.integer(size))
+		print(nrow(sub1))
+
+		if(nrow(sub1) <10) sub1 <- subset(regions, subset=(end-start)%in%(as.integer(size)+seq(-100,100, by=50)))
+		background.out <- rbind(background.out, sub1[sample.int(nrow(sub1), sim.sizes.table[size]),])
+		cat("\tDONE!\n")
+	}
+
+	#need to match them back to their chrs so we can pull the seq from genome
+	#pull FASTAS
+	#read back and return DNAStringSet
+	#make bed file of simulated draw positions
+	sim.bed <- data.frame(chr=background.out$chr,start=background.out$start,end=background.out$end)
+	#sim.bed[sim.bed$start<0,]$start <- 0
+	write.table(sim.bed,file="output/simseq.bed",sep="\t",row.names=FALSE,col.names=FALSE,quote=FALSE)
+	system(paste("fastaFromBed -fi ",genome.path," -bed output/simseq.bed -fo output/simseq.fasta",sep=""))
+	system("sed -i 's/:/-/' output/simseq.fasta")
+
+	#TODO: do we need to add some unique ID to any duplicates so FIMO isn't confused or skips them?
+
+	sim.seq <- readDNAStringSet("output/simseq.fasta")
+	sim.seq
 }
+
+
 
 
 drawBackgroundSetResampled <- function()
