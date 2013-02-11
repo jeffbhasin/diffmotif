@@ -162,6 +162,63 @@ hist(seq2.meta$gc,breaks=breaks.gc)
 qqplot(seq1.meta$gc,seq2.meta$gc)
 dev.off()
 
+#method to find and draw best matches, using each only once to create new distribution (will have same number of seqs as distribution being matched)
+
+pool <- seq2.meta
+#pool$used <- 0
+
+resamp <- foreach(seq=iter(seq1.meta, by='row'),.combine=rbind) %do%
+{
+	#find closest other sizes
+	nearests <- which(abs(pool$size-seq$size)==min(abs(pool$size-seq$size)))
+
+	#now look at their GC and take the one with the closest GC
+	gc <- pool[nearests,]$gc
+	mine <- pool[nearests,]
+	mine2 <- mine[which(abs(gc-seq$gc)==min(abs(gc-seq$gc))),]
+
+	#if there are more than one pick one at random	
+	use <- sample(mine2$name,1)
+
+	#mark as used - just going to remove it to make it easier
+	mine.row <- pool[as.character(pool$name)==as.character(use),]
+	pool <- pool[as.character(pool$name)!=as.character(use),]
+
+	#return as member of new distribution
+	mine.row
+}
+
+#subset original DNAStringSet to just get the seqs we want
+seq.resamp <- seq2[names(seq2) %in% resamp$name]
+
+#replot distributions to see how well we did
+png(filename="output/dists.resamp.png",width=1000,height=800,res=120)
+par(mfrow=c(2,3))
+hist(seq1.meta$size,breaks=breaks)
+hist(resamp$size,breaks=breaks)
+qqplot(seq1.meta$size,resamp$size)
+hist(seq1.meta$gc,breaks=breaks.gc)
+hist(resamp$gc,breaks=breaks.gc)
+qqplot(seq1.meta$gc,resamp$gc)
+dev.off()
+
+#test run of FIMO
+sim.seq <- seq.resamp
+
+sim.nSeqs <- length(sim.seq)
+
+writeXStringSet(sim.seq, "output/simseq.fasta", append=FALSE, format="fasta")
+
+runFIMO("sim","output/simseq.fasta",motif.path)
+fimo.out.sim <- readFIMO("output/fimo_out_sim/fimo.txt")
+fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
+results <- calcEnrichmentBinom(fimo.out.counts,nSeqs,fimo.out.sim.counts,sim.nSeqs)
+results.sort <- results[order(results$pvalue, decreasing=FALSE),]
+head(results.sort)
+tail(results.sort)
+write.csv(results.sort,file="output/diffmotif.bkg.resamp-allhyperme.csv",row.names=FALSE)
+
+
 ###############################################
 #Find differential motifs from CIMP HyperMe versus All Tumors HyperMe
 #size and GC match farily well based on QQ plots (after filtering out long seqs from the all group)
