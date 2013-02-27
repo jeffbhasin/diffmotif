@@ -137,6 +137,7 @@ drawBackgroundSetResampled <- function()
 	#TODO - draw a background set using importance based resampling to match by both length and GC content
 }
 
+
 ###############################################
 ## Background Sequence Generators by Shuffles
 ###############################################

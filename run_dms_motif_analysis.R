@@ -269,6 +269,11 @@ freqs <- data.frame(bin=1:length(freqs),freq=freqs)
 #compute bin membership for each data point in data we're drawing from
 binnums <- cut(seq2.meta$gc,breaks.gc,labels=FALSE)
 
+#take differences
+
+
+#add differences back onto weights
+
 weights <- freqs[binnums,]$freq
 
 drawn.index <- sample(1:nrow(seq2.meta),1000000,replace=TRUE,prob=weights)
@@ -289,12 +294,17 @@ dev.off()
 #try for size
 
 freqs <- h1$counts/sum(h1$counts)
-freqs <- data.frame(bin=1:length(freqs),freq=freqs)
+
+freqs2 <- h2$counts/sum(h2$counts)
+
+freqs.all <- data.frame(bin=1:length(freqs),freq=freqs,freq.pool=freqs2,diff=(freqs-freqs2),wt=(freqs-freqs2)+freqs)
+freqs.all[freqs.all$wt<0,]$wt <- 0
 
 #compute bin membership for each data point in data we're drawing from
 binnums <- cut(seq2.meta$size,breaks,labels=FALSE)
 
-weights <- freqs[binnums,]$freq
+#subtract out from weight
+weights <- freqs.all[binnums,]$wt
 
 drawn.index <- sample(1:nrow(seq2.meta),1000000,replace=TRUE,prob=weights)
 
@@ -355,10 +365,10 @@ h4.2 <- hist(resamp2$gc,breaks=breaks.gc,freq=FALSE)
 #	ggplot(d) + geom_point(aes(x=x, y=y),stat = "identity", position = "identity")
 #}
 
-#ggplot.clean <- function()
-#{
-#	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
-#}
+ggplot.clean <- function()
+{
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
+}
 
 #p1 <- ggplot.qqplot(seq1.meta$size,seq2.meta$size) + ggplot.clean() + labs(x="CIMP Hyper Me", y="All Tumors Hyper Me",title="Size")
 #p2 <- ggplot.qqplot(seq1.meta$size,resamp$size) + ggplot.clean() + labs(x="CIMP Hyper Me", y="All Tumors Hyper Me",title="Size: Nearest Resamp")
@@ -462,3 +472,72 @@ head(results.sort)
 tail(results.sort)
 write.csv(results.sort,file="output/diffmotif.bkg.allhyperme.csv",row.names=FALSE)
 
+# -----------------------------------------------------------------------------
+# Run differential motif calculations against NS DMS sites (GR paper replic.)
+
+# Load list of sites exported from Yaomin's session
+load("ignore/yaomin_dms-test.report.Rd")
+
+# test.report.flat contains the significant and non-significant ones
+# test.report.sigs contains only the significant ones
+# Non-significant DMSs are those in test.report.flat but not in test.report.sigs
+sig.bed <- with(test.report.sigs,paste(chr,start,end,sep="\t"))
+all.bed <- with(test.report.flat,paste(chr,start,end,sep="\t"))
+
+# want the NS for CIMP Hypermethylated regions
+flat.111 <- test.report.flat[test.report.flat$pattern=="111",]
+flat.111.bed <- with(flat.111,paste(chr,start,(end+49),sep="\t"))
+
+# want sites in flat that are not in sigs
+ns.111 <- flat.111.bed[which(flat.111$p.value.1>=0.5)]
+
+# write bed file of these regions
+write.table(ns.111, file="ignore/ns.111.bed", row.names=FALSE, col.names=FALSE, sep="\t", quote=FALSE)
+
+# pull sequence from these regions using bedTools
+system("fastaFromBed -fi ../RunMEME/ColonSeqGR2012/hg18.fa -bed ignore/ns.111.bed -fo ignore/ns.111.fasta")
+
+# change ":" to "-" to prevent FIMO from truncating sequence names
+system("sed -i 's/:/-/' ignore/ns.111.fasta")
+
+# read in the seqs
+seq1 <- seq
+seq2.path <- "ignore/ns.111.fasta"
+seq2 <- readDNAStringSet(seq2.path)
+
+getGC <- function(seq)
+{
+	g <- alphabetFrequency(seq)[,3]
+	c <- alphabetFrequency(seq)[,2]
+	a <- alphabetFrequency(seq)[,1]
+	t <- alphabetFrequency(seq)[,4]
+
+	gc <- (g+c) / (a+t+g+c)
+	gc
+}
+
+seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
+seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+
+#filter anything in seq2 bigger than the max of seq1
+seq2.meta <- seq2.meta[seq2.meta$size<=max(seq1.meta$size),]
+
+breaks <- seq(0,max(seq1.meta$size)+100,by=100)
+breaks.gc <- seq(0,1,by=0.05)
+#filter out 
+
+#freq=TRUE
+#make plots of the starting distributions
+png(filename="output/dists2.png",width=1000,height=800,res=120)
+par(mfrow=c(2,3))
+hist(seq1.meta$size,breaks=breaks,freq=FALSE)
+hist(seq2.meta$size,breaks=breaks,freq=FALSE)
+qqplot(seq1.meta$size,seq2.meta$size)
+hist(seq1.meta$gc,breaks=breaks.gc,freq=FALSE)
+hist(seq2.meta$gc,breaks=breaks.gc,freq=FALSE)
+qqplot(seq1.meta$gc,seq2.meta$gc)
+dev.off()
+
+# run FIMO
+
+# -----------------------------------------------------------------------------
