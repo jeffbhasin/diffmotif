@@ -11,6 +11,8 @@ nCores <- 15
 
 library(ggplot2)
 library(gridExtra)
+library(Matching)
+library(rms)
 library(doMC)
 registerDoMC(nCores)
 
@@ -41,13 +43,25 @@ getGC <- function(seq)
 # Draws background from a source using propensity score matching
 # Input:
 # Output: 
-library(Matching)
-drawBackgroundSetPropensity <- function()
+
+drawBackgroundSetPropensity <- function(target.meta, pool.meta)
 {
 	# TODO - draw a background set using propensity score matching
+	# TODO - make function take a variable of which model/covars to use
 
 	# estimate propensity model first
-	#
+
+	# instead of "treatment" the variable is 1 if in target distribution and 0 if in background pool distribution
+	# the linear regression is then of this categorical assignment versus a model of the other covariates we want
+
+	# create "treatment" variable
+
+	# run logistic regression of treatment ~ covar model
+
+	# match based on propensity score
+
+	# test quality of matching
+
 }
 # -----------------------------------------------------------------------------
 
@@ -57,7 +71,7 @@ drawBackgroundSetPropensity <- function()
 # Analysis Code
 
 # -----------------------------------------------------------------------------
-# Section 1
+# Load seqs and run via function
 
 # load source set of sequences
 seq1.path <- "../RunMEME/ColonSeqGR2012/CIMPHyperMe.fasta"
@@ -76,7 +90,53 @@ seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# Section 2
+# Testing of Matching package options and linear models
+
+target.meta <- seq1.meta
+pool.meta <- seq2.meta
+
+target.meta$treat <- 0
+pool.meta$treat <- 1
+all.meta <- rbind(target.meta, pool.meta)
+
+# GC
+lrm.out.gc <- lrm(treat ~ gc, data=all.meta)
+#png(filename="output/propscore.gc.lrm.png",width=1000,height=800,res=120)
+lrm.out.gc.fitted <- predict.lrm(lrm.out.gc,type="fitted")
+#qplot(x=gc,y=treat,data=all.meta) + geom_line(aes(x, y), data.frame(x=all.meta$gc,y=lrm.out.gc.fitted)) + ggplot.clean()
+#dev.off()
+
+
+
+# Size
+#glm.out <- glm(treat ~ size, family=binomial(link=logit), data=all.meta)
+lrm.out.size <- lrm(treat ~ size, data=all.meta)
+#png(filename="output/propscore.size.lrm.png",width=1000,height=800,res=120)
+lrm.out.size.fitted <- predict.lrm(lrm.out.size,type="fitted")
+#qplot(x=size,y=treat,data=all.meta) + geom_line(aes(x, y), data.frame(x=all.meta$size,y=lrm.out.size.fitted)) + ggplot.clean()
+#dev.off()
+
+
+# Size + GC
+lrm.out.sizegc <- lrm(treat ~ size + gc, data=all.meta)
+lrm.out.sizegc.fitted <- predict.lrm(lrm.out.sizegc,type="fitted")
+# can't plot without separating dimmensions
+#png(filename="output/propscore.size-gc.lrm.png",width=1000,height=800,res=120)
+#qplot(x=size+gc,y=treat,data=all.meta) + geom_point(aes(x, y), data.frame(x=all.meta$size+all.meta$gc,y=1-glm.out$fitted))
+#dev.off()
+
+
+#Do Matching
+#rr.gc  <- Match(Y=NULL, Tr=all.meta$treat, X=lrm.out.gc.fitted, M=1)
+#rr.size  <- Match(Y=NULL, Tr=all.meta$treat, X=lrm.out.size.fitted, M=1, version="fast")
+#rr.sizegc  <- Match(Y=NULL, Tr=all.meta$treat, X=lrm.out.size.fitted, M=1, version="fast")
+
+#rr.test <- Match(Y=NULL, Tr=all.meta$treat), X=head(lrm.out.gc.fitted), M=1)
+
+#summary(rr.size)
+
+#mb  <- MatchBalance(treat ~ size + gc, data=all.meta, match.out=rr, nboots=10)
+
 
 # -----------------------------------------------------------------------------
 

@@ -12,6 +12,11 @@ library(reshape)
 library(foreach)
 library(stringr)
 
+ggplot.clean <- function()
+{
+	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
+}
+
 ###############################################
 ## MEME Suite Interaction
 ###############################################
