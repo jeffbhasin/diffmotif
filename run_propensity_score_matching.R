@@ -95,48 +95,104 @@ seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
 target.meta <- seq1.meta
 pool.meta <- seq2.meta
 
-target.meta$treat <- 0
-pool.meta$treat <- 1
+# setting binary value for group assignment
+target.meta$treat <- 1
+pool.meta$treat <- 0
 all.meta <- rbind(target.meta, pool.meta)
 
-# GC
-lrm.out.gc <- lrm(treat ~ gc, data=all.meta)
-#png(filename="output/propscore.gc.lrm.png",width=1000,height=800,res=120)
-lrm.out.gc.fitted <- predict.lrm(lrm.out.gc,type="fitted")
-#qplot(x=gc,y=treat,data=all.meta) + geom_line(aes(x, y), data.frame(x=all.meta$gc,y=lrm.out.gc.fitted)) + ggplot.clean()
-#dev.off()
+# randomize sort order - order can bias when Match(..., replace=FALSE)
+index.random <- sample(seq(1:nrow(all.meta)),nrow(all.meta), replace=FALSE)
+all.meta.shuffle <- all.meta[index.random,]
 
+# GC
+# run logistic model
+lrm.out.gc <- lrm(treat ~ gc, data=all.meta.shuffle)
+# obtain values
+lrm.out.gc.fitted <- predict.lrm(lrm.out.gc,type="fitted")
+# plot
+png(filename="output/propscore.gc.lrm.png",width=1000,height=800,res=120)
+qplot(x=gc,y=treat,data=all.meta.shuffle) + geom_line(aes(x, y), data.frame(x=all.meta.shuffle$gc,y=lrm.out.gc.fitted)) + ggplot.clean()
+dev.off()
+# match
+rr.gc  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.gc.fitted, M=1, version="fast", replace=FALSE)
+# check match
+#summary(rr.size)
+#mb.gc  <- MatchBalance(treat ~ gc, data=all.meta.shuffle, match.out=rr.gc, nboots=10)
+# make new sequence set
+matched.meta.gc <- all.meta.shuffle[rr.gc$index.control,]
+m <- match(as.character(matched.meta.gc$name),names(seq2))
+seq.resamp.gc <- seq2[m]
+
+# plot histograms of new sequence set versus old
+png(filename="output/dists.resamp.propen.gc.png",width=1000,height=800,res=120)
+plotSequenceHistograms(seq1,seq.resamp.gc)
+dev.off()
+
+png(filename="output/dists.resamp.propen.gc.overlap.png",width=1400,height=800,res=120)
+plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.gc)
+dev.off()
+
+
+# run motif analysis using the resampled background
 
 
 # Size
 #glm.out <- glm(treat ~ size, family=binomial(link=logit), data=all.meta)
-lrm.out.size <- lrm(treat ~ size, data=all.meta)
+lrm.out.size <- lrm(treat ~ size, data=all.meta.shuffle)
 #png(filename="output/propscore.size.lrm.png",width=1000,height=800,res=120)
 lrm.out.size.fitted <- predict.lrm(lrm.out.size,type="fitted")
 #qplot(x=size,y=treat,data=all.meta) + geom_line(aes(x, y), data.frame(x=all.meta$size,y=lrm.out.size.fitted)) + ggplot.clean()
 #dev.off()
+# match
+rr.size  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.size.fitted, M=1, version="fast", replace=FALSE)
+# check match
+#summary(rr.size)
+#mb.gc  <- MatchBalance(treat ~ gc, data=all.meta.shuffle, match.out=rr.gc, nboots=10)
+# make new sequence set
+matched.meta.size <- all.meta.shuffle[rr.size$index.control,]
+m <- match(as.character(matched.meta.size$name),names(seq2))
+seq.resamp.size <- seq2[m]
 
+# plot histograms of new sequence set versus old
+png(filename="output/dists.resamp.propen.size.png",width=1000,height=800,res=120)
+plotSequenceHistograms(seq1,seq.resamp.size)
+dev.off()
+
+png(filename="output/dists.resamp.propen.size.overlap.png",width=1400,height=800,res=120)
+plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.size)
+dev.off()
+
+png(filename="output/dists.resamp.propen.qq.png",width=1400,height=800,res=120)
+plotSequenceQQ(seq1,seq2,seq.resamp.gc,seq.resamp.size,c("Original","GC","Size"))
+dev.off()
 
 # Size + GC
-lrm.out.sizegc <- lrm(treat ~ size + gc, data=all.meta)
+lrm.out.sizegc <- lrm(treat ~ size + gc, data=all.meta.shuffle)
 lrm.out.sizegc.fitted <- predict.lrm(lrm.out.sizegc,type="fitted")
 # can't plot without separating dimmensions
 #png(filename="output/propscore.size-gc.lrm.png",width=1000,height=800,res=120)
 #qplot(x=size+gc,y=treat,data=all.meta) + geom_point(aes(x, y), data.frame(x=all.meta$size+all.meta$gc,y=1-glm.out$fitted))
 #dev.off()
-
-
-#Do Matching
-#rr.gc  <- Match(Y=NULL, Tr=all.meta$treat, X=lrm.out.gc.fitted, M=1)
-#rr.size  <- Match(Y=NULL, Tr=all.meta$treat, X=lrm.out.size.fitted, M=1, version="fast")
-#rr.sizegc  <- Match(Y=NULL, Tr=all.meta$treat, X=lrm.out.size.fitted, M=1, version="fast")
-
-#rr.test <- Match(Y=NULL, Tr=all.meta$treat), X=head(lrm.out.gc.fitted), M=1)
-
+# match
+rr.sizegc  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.sizegc.fitted, M=1, version="fast", replace=FALSE)
+# check match
 #summary(rr.size)
+#mb.gc  <- MatchBalance(treat ~ gc, data=all.meta.shuffle, match.out=rr.gc, nboots=10)
+# make new sequence set
+matched.meta.sizegc <- all.meta.shuffle[rr.sizegc$index.control,]
+m <- match(as.character(matched.meta.sizegc$name),names(seq2))
+seq.resamp.sizegc <- seq2[m]
 
-#mb  <- MatchBalance(treat ~ size + gc, data=all.meta, match.out=rr, nboots=10)
+# plot histograms of new sequence set versus old
+png(filename="output/dists.resamp.propen.sizegc.png",width=1000,height=800,res=120)
+plotSequenceHistograms(seq1,seq.resamp.sizegc)
+dev.off()
 
+png(filename="output/dists.resamp.propen.sizegc.overlap.png",width=1400,height=800,res=120)
+plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.sizegc)
+dev.off()
+
+save.image(file="ignore/propensity.Rd")
 
 # -----------------------------------------------------------------------------
 

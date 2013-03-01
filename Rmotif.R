@@ -202,6 +202,138 @@ uShuffle <- function(string, klet)
 	cdata$t
 }
 
+plotSequenceHistograms <- function(seq1,seq2)
+{
+	breaks <- seq(0,max(seq1.meta$size,seq2.meta$size)+100,by=100)
+	breaks.gc <- seq(0,1,by=0.05)
+
+	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
+	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+
+	par(mfrow=c(2,3))
+	hist(seq1.meta$size, breaks=breaks,freq=FALSE)
+	hist(seq2.meta$size, breaks=breaks,freq=FALSE)
+	qqplot(seq1.meta$size,seq2.meta$size)
+	hist(seq1.meta$gc,breaks=breaks.gc,freq=FALSE)
+	hist(seq2.meta$gc,breaks=breaks.gc,freq=FALSE)
+	qqplot(seq1.meta$gc,seq2.meta$gc)
+}
+
+plotSequenceHistogramsResampled <- function(seq1,seq2,seq3)
+{
+	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
+	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+	resamp <- data.frame(name=names(seq3),size=width(seq3),gc=getGC(seq3))
+
+	#filter anything in seq2 bigger than the max in seq1
+	seq2.meta <- seq2.meta[seq2.meta$size<=max(seq1.meta$size),]
+
+	breaks <- seq(0,max(seq1.meta$size,seq2.meta$size,resamp$size)+100,by=100)
+	breaks.gc <- seq(0,1,by=0.05)
+
+	h1 <- hist(seq1.meta$size,breaks=breaks,plot=FALSE)
+	h2 <- hist(seq2.meta$size,breaks=breaks,plot=FALSE)
+	h2.1 <- hist(resamp$size,breaks=breaks,plot=FALSE)
+
+	h3 <- hist(seq1.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4 <- hist(seq2.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4.1 <- hist(resamp$gc,breaks=breaks.gc,plot=FALSE)
+
+	ggplot.hist.overlap <- function(h1,h2,name1="Hist 1",name2="Hist 2",xlab="",ylab="",main="")
+	{
+		plot.data <- data.frame(bin=h1$mids,freq=h1$count/sum(h1$count),seq=name1)
+		plot.data <- rbind(plot.data,data.frame(bin=h2$mids,freq=h2$count/sum(h2$count),seq=name2))
+		ggplot(plot.data, aes(x=bin,y=freq,fill=seq)) + geom_bar(data=subset(plot.data,seq == name1), stat="identity",alpha=0.5) + geom_bar(data=subset(plot.data,seq == name2), stat="identity",alpha=0.5) + scale_fill_manual("", values = c("#007FFF","#FF007F")) + labs(x=xlab, y=ylab, title = main) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
+	}
+
+	p1 <- ggplot.hist.overlap(h1,h2,"Target","Background","Bin Mid","Prob.","Size: Original")
+	p2 <- ggplot.hist.overlap(h1,h2.1,"Target","Background","Bin Mid","Prob.","Size: Resampled") + theme(legend.position = "none")
+	p3 <- ggplot.hist.overlap(h3,h4,"Target","Background","Bin Mid","Prob.","GC: Original") + theme(legend.position = "none")
+	p4 <- ggplot.hist.overlap(h3,h4.1,"Target","Background","Bin Mid","Prob.","GC: Resampled") + theme(legend.position="none")
+	#p5 <- ggplot.hist.overlap(h1,h2.2,"Target","Background","Bin Mid","Prob.","Size: \"IS\" Resamp") + theme(legend.position = "none")
+	#p6 <- ggplot.hist.overlap(h3,h4.2,"Target","Background","Bin Mid","Prob.","GC: \"IS\" Resamp") + theme(legend.position="none")
+
+	#g1 <- arrangeGrob(p1 + theme(legend.position = "none"),p2,p5,p3,p4,p6,ncol=3)
+	g1 <- arrangeGrob(p1 + theme(legend.position = "none"),p2,p3,p4,ncol=2)
+
+	#plot overlapping hists
+
+	tmp <- ggplot_gtable(ggplot_build(p1))
+	leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+	legend <- tmp$grobs[[leg]]
+
+
+	grid.arrange(g1, legend, widths=c(6/7,1/7), nrow=1)
+}
+
+plotSequenceQQ <- function(seq1,seq2,seq3,seq4,labels)
+{
+	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
+	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+	resamp <- data.frame(name=names(seq3),size=width(seq3),gc=getGC(seq3))
+	resamp2 <- data.frame(name=names(seq4),size=width(seq4),gc=getGC(seq4))
+
+	#filter anything in seq2 bigger than the max in seq1
+	seq2.meta <- seq2.meta[seq2.meta$size<=max(seq1.meta$size),]
+
+	breaks <- seq(0,max(seq1.meta$size)+100,by=100)
+	breaks.gc <- seq(0,1,by=0.05)
+
+	h1 <- hist(seq1.meta$size,breaks=breaks,plot=FALSE)
+	h2 <- hist(seq2.meta$size,breaks=breaks,plot=FALSE)
+	h2.1 <- hist(resamp$size,breaks=breaks,plot=FALSE)
+
+	h3 <- hist(seq1.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4 <- hist(seq2.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4.1 <- hist(resamp$gc,breaks=breaks.gc,plot=FALSE)
+
+	h2.2 <- hist(resamp2$size,breaks=breaks,plot=FALSE)
+	h4.2 <- hist(resamp2$gc,breaks=breaks.gc,plot=FALSE)
+
+	####QQ Plots + Distance Metric Data Table
+	#equations to find one difference measure between two histograms
+	distanceEuclidean <- function(h1,h2)
+	{
+		d1 <- h1$counts/sum(h1$counts)
+		d2 <- h2$counts/sum(h2$counts)
+		sqrt(sum(abs(d1-d2)^2))
+	}
+
+	distanceBhattacharyya <- function(h1,h2)
+	{
+		d1 <- h1$counts/sum(h1$counts)
+		d2 <- h2$counts/sum(h2$counts)
+		#-log(sum(sqrt(d1*d2)))
+		sum(sqrt(d1*d2)) #value of 1 should indicate a perfect match (finding square of angle between two vecotrs of positions to cosine of angle between them is 1 if identical) - should not be effected by bin widths
+	}
+	dist1 <- round(c(distanceEuclidean(h1,h2), distanceEuclidean(h1,h2.1), distanceEuclidean(h1,h2.2)),digits=3)
+	dist2 <- round(c(distanceEuclidean(h3,h4), distanceEuclidean(h3,h4.1), distanceEuclidean(h3,h4.2)),digits=3)
+	dist3 <- round(c(distanceBhattacharyya(h1,h2), distanceBhattacharyya(h1,h2.1), distanceBhattacharyya(h1,h2.2)),digits=3)
+	dist4 <- round(c(distanceBhattacharyya(h3,h4), distanceBhattacharyya(h3,h4.1) , distanceBhattacharyya(h3,h4.2)),digits=3)
+
+	distance.stats <- data.frame(size.dist.euclid=dist1,gc.dist.euclid=dist2,size.dist.bhatt=dist3,gc.dist.bhatt=dist4,row.names=labels)
+
+
+	ggplot.qqplot.geom <- function(data1,data2)
+	{
+		d <- as.data.frame(qqplot(data1, data2, plot.it=FALSE))
+		ggplot(d) + geom_point(aes(x=x, y=y),stat = "identity", position = "identity")
+	}
+
+	d <- data.frame(as.data.frame(qqplot(seq1.meta$size, seq2.meta$size, plot.it=FALSE)),Sequences=labels[1])
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp$size, plot.it=FALSE)),Sequences=labels[2]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp2$size, plot.it=FALSE)),Sequences=labels[3]))
+	p1 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="Size") + geom_abline(slope = 1, intercept=0)
+	d <- data.frame(as.data.frame(qqplot(seq1.meta$gc, seq2.meta$gc, plot.it=FALSE)),Sequences=labels[1])
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp$gc, plot.it=FALSE)),Sequences=labels[2]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp2$gc, plot.it=FALSE)),Sequences=labels[3]))
+	p2 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="GC") + geom_abline(slope = 1, intercept=0)
+	g1 <- arrangeGrob(p1,p2,ncol=2)
+
+	distance.stats.grob <- arrangeGrob(tableGrob(distance.stats))
+	grid.arrange(g1, distance.stats.grob, ncol=1,heights=c(4/5,1/5))
+}
+
 ###############################################
 ## Enrichment Testing
 ###############################################
