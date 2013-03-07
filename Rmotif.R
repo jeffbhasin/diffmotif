@@ -266,7 +266,7 @@ plotSequenceHistogramsResampled <- function(seq1,seq2,seq3)
 	grid.arrange(g1, legend, widths=c(6/7,1/7), nrow=1)
 }
 
-plotSequenceQQ <- function(seq1,seq2,seq3,seq4,labels)
+plotSequenceQQ4 <- function(seq1,seq2,seq3,seq4,labels)
 {
 	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
 	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
@@ -333,6 +333,156 @@ plotSequenceQQ <- function(seq1,seq2,seq3,seq4,labels)
 	distance.stats.grob <- arrangeGrob(tableGrob(distance.stats))
 	grid.arrange(g1, distance.stats.grob, ncol=1,heights=c(4/5,1/5))
 }
+
+plotSequenceQQ5 <- function(seq1,seq2,seq3,seq4,seq5,labels)
+{
+	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
+	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+	resamp <- data.frame(name=names(seq3),size=width(seq3),gc=getGC(seq3))
+	resamp2 <- data.frame(name=names(seq4),size=width(seq4),gc=getGC(seq4))
+	resamp3 <- data.frame(name=names(seq5),size=width(seq5),gc=getGC(seq5))
+
+	#filter anything in seq2 bigger than the max in seq1
+	seq2.meta <- seq2.meta[seq2.meta$size<=max(seq1.meta$size),]
+
+	breaks <- seq(0,max(seq1.meta$size,resamp3$size)+100,by=100)
+	breaks.gc <- seq(0,1,by=0.05)
+
+	h1 <- hist(seq1.meta$size,breaks=breaks,plot=FALSE)
+	h2 <- hist(seq2.meta$size,breaks=breaks,plot=FALSE)
+	h2.1 <- hist(resamp$size,breaks=breaks,plot=FALSE)
+
+	h3 <- hist(seq1.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4 <- hist(seq2.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4.1 <- hist(resamp$gc,breaks=breaks.gc,plot=FALSE)
+
+	h2.2 <- hist(resamp2$size,breaks=breaks,plot=FALSE)
+	h4.2 <- hist(resamp2$gc,breaks=breaks.gc,plot=FALSE)
+
+	h2.3 <- hist(resamp3$size,breaks=breaks,plot=FALSE)
+	h4.3 <- hist(resamp3$gc,breaks=breaks.gc,plot=FALSE)
+
+	####QQ Plots + Distance Metric Data Table
+	#equations to find one difference measure between two histograms
+	distanceEuclidean <- function(h1,h2)
+	{
+		d1 <- h1$counts/sum(h1$counts)
+		d2 <- h2$counts/sum(h2$counts)
+		sqrt(sum(abs(d1-d2)^2))
+	}
+
+	distanceBhattacharyya <- function(h1,h2)
+	{
+		d1 <- h1$counts/sum(h1$counts)
+		d2 <- h2$counts/sum(h2$counts)
+		#-log(sum(sqrt(d1*d2)))
+		sum(sqrt(d1*d2)) #value of 1 should indicate a perfect match (finding square of angle between two vecotrs of positions to cosine of angle between them is 1 if identical) - should not be effected by bin widths
+	}
+	dist1 <- round(c(distanceEuclidean(h1,h2), distanceEuclidean(h1,h2.1), distanceEuclidean(h1,h2.2), distanceEuclidean(h1,h2.3)),digits=3)
+	dist2 <- round(c(distanceEuclidean(h3,h4), distanceEuclidean(h3,h4.1), distanceEuclidean(h3,h4.2), distanceEuclidean(h3,h4.3)),digits=3)
+	dist3 <- round(c(distanceBhattacharyya(h1,h2), distanceBhattacharyya(h1,h2.1), distanceBhattacharyya(h1,h2.2), distanceBhattacharyya(h1,h2.3)),digits=3)
+	dist4 <- round(c(distanceBhattacharyya(h3,h4), distanceBhattacharyya(h3,h4.1) , distanceBhattacharyya(h3,h4.2), distanceBhattacharyya(h3,h4.3)),digits=3)
+
+	distance.stats <- data.frame(size.dist.euclid=dist1,gc.dist.euclid=dist2,size.dist.bhatt=dist3,gc.dist.bhatt=dist4,row.names=labels)
+
+
+	ggplot.qqplot.geom <- function(data1,data2)
+	{
+		d <- as.data.frame(qqplot(data1, data2, plot.it=FALSE))
+		ggplot(d) + geom_point(aes(x=x, y=y),stat = "identity", position = "identity")
+	}
+
+	d <- data.frame(as.data.frame(qqplot(seq1.meta$size, seq2.meta$size, plot.it=FALSE)),Sequences=labels[1])
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp$size, plot.it=FALSE)),Sequences=labels[2]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp2$size, plot.it=FALSE)),Sequences=labels[3]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp3$size, plot.it=FALSE)),Sequences=labels[4]))
+	p1 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="Size") + geom_abline(slope = 1, intercept=0)
+	d <- data.frame(as.data.frame(qqplot(seq1.meta$gc, seq2.meta$gc, plot.it=FALSE)),Sequences=labels[1])
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp$gc, plot.it=FALSE)),Sequences=labels[2]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp2$gc, plot.it=FALSE)),Sequences=labels[3]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp3$gc, plot.it=FALSE)),Sequences=labels[4]))
+	p2 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="GC") + geom_abline(slope = 1, intercept=0)
+	g1 <- arrangeGrob(p1,p2,ncol=2)
+
+	distance.stats.grob <- arrangeGrob(tableGrob(distance.stats))
+	grid.arrange(g1, distance.stats.grob, ncol=1,heights=c(4/5,1/5))
+}
+
+plotSequenceQQR5 <- function(seq1,seq2,seq3,seq4,seq5,labels)
+{
+	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
+	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+	resamp <- data.frame(name=names(seq3),size=width(seq3),gc=getGC(seq3))
+	resamp2 <- data.frame(name=names(seq4),size=width(seq4),gc=getGC(seq4))
+	resamp3 <- data.frame(name=names(seq5),size=width(seq5),gc=getGC(seq5))
+
+	#filter anything in seq2 bigger than the max in seq1
+	seq2.meta <- seq2.meta[seq2.meta$size<=max(seq1.meta$size),]
+
+	breaks <- seq(0,max(seq1.meta$size,resamp3$size)+100,by=100)
+	breaks.gc <- seq(0,1,by=0.05)
+
+	h1 <- hist(seq1.meta$size,breaks=breaks,plot=FALSE)
+	h2 <- hist(seq2.meta$size,breaks=breaks,plot=FALSE)
+	h2.1 <- hist(resamp$size,breaks=breaks,plot=FALSE)
+
+	h3 <- hist(seq1.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4 <- hist(seq2.meta$gc,breaks=breaks.gc,plot=FALSE)
+	h4.1 <- hist(resamp$gc,breaks=breaks.gc,plot=FALSE)
+
+	h2.2 <- hist(resamp2$size,breaks=breaks,plot=FALSE)
+	h4.2 <- hist(resamp2$gc,breaks=breaks.gc,plot=FALSE)
+
+	h2.3 <- hist(resamp3$size,breaks=breaks,plot=FALSE)
+	h4.3 <- hist(resamp3$gc,breaks=breaks.gc,plot=FALSE)
+
+	####QQ Plots + Distance Metric Data Table
+	#get R^2 values on the QQ plots
+	qqcor <- function(c1,c2)
+	{
+		qqd <- qqplot(c1, c2, plot.it=FALSE)
+		cor(qqd$x,qqd$y)
+	}
+
+#	qqcorlm <- function(c1,c2)
+#	{
+#		lm1 <- lm(0 + qqd$y ~ 0 + qqd$x)
+#		s <- summary(lm1)
+#		s$r.squared
+#png(filename="tmp.png",res=120)
+#plot(qqd$x,qqd$y)
+#abline(0, coef(lm1))
+#dev.off()
+
+#	}
+
+	dist1 <- round(c(qqcor(seq1.meta$size,seq2.meta$size), qqcor(seq1.meta$size,resamp$size), qqcor(seq1.meta$size,resamp2$size), qqcor(seq1.meta$size,resamp3$size)),digits=3)
+	dist2 <- round(c(qqcor(seq1.meta$gc,seq2.meta$gc), qqcor(seq1.meta$gc,resamp$gc), qqcor(seq1.meta$gc,resamp2$gc), qqcor(seq1.meta$gc,resamp3$gc)),digits=3)
+	distance.stats <- data.frame(size.r=dist1,gc.r=dist2,row.names=labels)
+
+
+	ggplot.qqplot.geom <- function(data1,data2)
+	{
+		d <- as.data.frame(qqplot(data1, data2, plot.it=FALSE))
+		ggplot(d) + geom_point(aes(x=x, y=y),stat = "identity", position = "identity")
+	}
+
+	d <- data.frame(as.data.frame(qqplot(seq1.meta$size, seq2.meta$size, plot.it=FALSE)),Sequences=labels[1])
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp$size, plot.it=FALSE)),Sequences=labels[2]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp2$size, plot.it=FALSE)),Sequences=labels[3]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp3$size, plot.it=FALSE)),Sequences=labels[4]))
+	p1 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="Size") + geom_abline(slope = 1, intercept=0)
+	d <- data.frame(as.data.frame(qqplot(seq1.meta$gc, seq2.meta$gc, plot.it=FALSE)),Sequences=labels[1])
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp$gc, plot.it=FALSE)),Sequences=labels[2]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp2$gc, plot.it=FALSE)),Sequences=labels[3]))
+	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp3$gc, plot.it=FALSE)),Sequences=labels[4]))
+	p2 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="GC") + geom_abline(slope = 1, intercept=0)
+	g1 <- arrangeGrob(p1,p2,ncol=2)
+
+	distance.stats.grob <- arrangeGrob(tableGrob(distance.stats))
+	grid.arrange(g1, distance.stats.grob, ncol=1,heights=c(4/5,1/5))
+}
+
 
 ###############################################
 ## Enrichment Testing

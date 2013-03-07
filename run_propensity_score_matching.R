@@ -80,12 +80,17 @@ seq1.nSeqs <- length(seq1)
 
 # load background "pool" we want to draw from and make match the distribution of variable from the target
 seq2.path <- "ignore/ns.111.fasta"
-seq2 <- readDNAStringSet(seq2.path)
-seq2.nSeqs <- length(seq2)
+seq2.unfiltered <- readDNAStringSet(seq2.path)
+seq2.nSeqs <- length(seq2.unfiltered)
 
 # make dataframe of variables for each sequence - GC and size for now, could add distance from TSS, etc in the future
 seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
-seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
+seq2.meta.unfiltered <- data.frame(name=names(seq2.unfiltered),size=width(seq2.unfiltered),gc=getGC(seq2.unfiltered))
+
+# filter out all sequences longer than or shorter than the target from the background pool
+seq2.meta <- seq2.meta.unfiltered[(seq2.meta.unfiltered$size<=max(seq1.meta$size))&(seq2.meta.unfiltered$size>=min(seq1.meta$size)),]
+
+seq2 <- seq2.unfiltered[(seq2.meta.unfiltered$size<=max(seq1.meta$size))&(seq2.meta.unfiltered$size>=min(seq1.meta$size))]
 
 # -----------------------------------------------------------------------------
 
@@ -110,9 +115,9 @@ lrm.out.gc <- lrm(treat ~ gc, data=all.meta.shuffle)
 # obtain values
 lrm.out.gc.fitted <- predict.lrm(lrm.out.gc,type="fitted")
 # plot
-png(filename="output/propscore.gc.lrm.png",width=1000,height=800,res=120)
-qplot(x=gc,y=treat,data=all.meta.shuffle) + geom_line(aes(x, y), data.frame(x=all.meta.shuffle$gc,y=lrm.out.gc.fitted)) + ggplot.clean()
-dev.off()
+#png(filename="output/propscore.gc.lrm.png",width=1000,height=800,res=120)
+#qplot(x=gc,y=treat,data=all.meta.shuffle) + geom_line(aes(x, y), data.frame(x=all.meta.shuffle$gc,y=lrm.out.gc.fitted)) + ggplot.clean()
+#dev.off()
 # match
 rr.gc  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.gc.fitted, M=1, version="fast", replace=FALSE)
 # check match
@@ -124,11 +129,11 @@ m <- match(as.character(matched.meta.gc$name),names(seq2))
 seq.resamp.gc <- seq2[m]
 
 # plot histograms of new sequence set versus old
-png(filename="output/dists.resamp.propen.gc.png",width=1000,height=800,res=120)
+png(filename="output/dists.filter.resamp.propen.gc.png",width=1000,height=800,res=120)
 plotSequenceHistograms(seq1,seq.resamp.gc)
 dev.off()
 
-png(filename="output/dists.resamp.propen.gc.overlap.png",width=1400,height=800,res=120)
+png(filename="output/dists.filter.resamp.propen.gc.overlap.png",width=1400,height=800,res=120)
 plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.gc)
 dev.off()
 
@@ -154,17 +159,17 @@ m <- match(as.character(matched.meta.size$name),names(seq2))
 seq.resamp.size <- seq2[m]
 
 # plot histograms of new sequence set versus old
-png(filename="output/dists.resamp.propen.size.png",width=1000,height=800,res=120)
+png(filename="output/dists.filter.resamp.propen.size.png",width=1000,height=800,res=120)
 plotSequenceHistograms(seq1,seq.resamp.size)
 dev.off()
 
-png(filename="output/dists.resamp.propen.size.overlap.png",width=1400,height=800,res=120)
+png(filename="output/dists.filter.resamp.propen.size.overlap.png",width=1400,height=800,res=120)
 plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.size)
 dev.off()
 
-png(filename="output/dists.resamp.propen.qq.png",width=1400,height=800,res=120)
-plotSequenceQQ(seq1,seq2,seq.resamp.gc,seq.resamp.size,c("Original","GC","Size"))
-dev.off()
+#png(filename="output/dists.resamp.propen.qq.png",width=1400,height=800,res=120)
+#plotSequenceQQ4(seq1,seq2,seq.resamp.gc,seq.resamp.size,c("Original","GC","Size"))
+#dev.off()
 
 # Size + GC
 lrm.out.sizegc <- lrm(treat ~ size + gc, data=all.meta.shuffle)
@@ -184,15 +189,31 @@ m <- match(as.character(matched.meta.sizegc$name),names(seq2))
 seq.resamp.sizegc <- seq2[m]
 
 # plot histograms of new sequence set versus old
-png(filename="output/dists.resamp.propen.sizegc.png",width=1000,height=800,res=120)
+png(filename="output/dists.filter.resamp.propen.sizegc.png",width=1000,height=800,res=120)
 plotSequenceHistograms(seq1,seq.resamp.sizegc)
 dev.off()
 
-png(filename="output/dists.resamp.propen.sizegc.overlap.png",width=1400,height=800,res=120)
+png(filename="output/dists.filter.resamp.propen.sizegc.overlap.png",width=1400,height=800,res=120)
 plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.sizegc)
 dev.off()
 
+# Plots
+
+
+png(filename="output/dists.filter.resamp.propen.qqr2.png",width=1400,height=800,res=120)
+plotSequenceQQR5(seq1,seq2,seq.resamp.gc,seq.resamp.size,seq.resamp.sizegc,c("Original","GC","Size","Size+GC"))
+dev.off()
+
 save.image(file="ignore/propensity.Rd")
+
+
+
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Run binomial test on the matches we made
+
 
 # -----------------------------------------------------------------------------
 
