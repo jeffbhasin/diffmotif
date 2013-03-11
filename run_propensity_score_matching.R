@@ -214,6 +214,35 @@ save.image(file="ignore/propensity.Rd")
 # -----------------------------------------------------------------------------
 # Run binomial test on the matches we made
 
+motif.path <- "../TRANSFAC/ConvertToMEME/TRAJAS.Human.named.meme"
+q.cutoff <- 0.05
+
+# read in FIMO run on target
+run.name <- "CIMPHyperMe"
+nSeqs <- length(seq)
+#runFIMO(run.name,seq.path,motif.path)
+fimo.out <- readFIMO(paste("output/fimo_out_",run.name,"/fimo.txt",sep=""))
+fimo.out.counts <- calcMotifCounts(fimo.out,q.cutoff)
+
+
+# must have resampled seq set at this point
+seq.target <- seq1
+seq.background <- seq.resamp.sizegc
+
+sim.nSeqs <- length(seq.background)
+
+unlink("output/simseq.fasta")
+writeXStringSet(seq.background, "output/simseq.fasta", append=FALSE, format="fasta")
+
+#unlink("output/fimo_out_sim")
+#runFIMO("sim","output/simseq.fasta",motif.path)
+fimo.out.sim <- readFIMO("output/fimo_out_sim/fimo.txt")
+fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
+results <- calcEnrichmentBinom(fimo.out.counts,nSeqs,fimo.out.sim.counts,sim.nSeqs)
+results.sort <- results[order(results$pvalue, decreasing=FALSE),]
+head(results.sort)
+tail(results.sort)
+write.csv(results.sort,file="output/diffmotif.bkg.propensity.sizegc.csv",row.names=FALSE)
 
 # -----------------------------------------------------------------------------
 
