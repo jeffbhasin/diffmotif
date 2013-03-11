@@ -392,6 +392,45 @@ write.csv(counts_percents,file="output/annotation/overlap_percents.csv",row.name
 # -----------------------------------------------------------------------------
 # Produce covariate annotation for use with propensity score matching
 
+seq.list <- dms[dms$type=="CIMPHyperMe",]
+seq.meta <- with(seq.list,data.frame(chr=chr,start=Start,end=End))
+regions.ranges <- with(seq.meta,GRanges(seqnames=chr,ranges=IRanges(start=start+1,end=end)))
+
+# repeatPer
+readRepeatMasker <- function(genome,path)
+{
+	rmsk.path <- paste(path,genome,".rmsk.txt",sep="")
+	rmsk <- read.table.ucsc.big(rmsk.path)
+	rmsk
+}
+
+getRepeatPercent <- function(regions.ranges,rmsk)
+{
+	#intersect with rmsk table, then collapse into nonoverlapping regions covering all repeats - want the % coverage of these regions versus the entire sequence length
+
+	rmsk.ranges <- with(rmsk,GRanges(seqnames=genoName,ranges=IRanges(start=genoStart+1,end=genoEnd)))
+
+	#per <- foreach(i=1:length(regions.ranges),.combine="c") %do%
+	per <- foreach(i=1:length(regions.ranges),.combine="c",.verbose=TRUE) %dopar%
+	{
+		cov <- intersect(regions.ranges[i],rmsk.ranges)
+		cov <- reduce(cov)
+		#after reduction, the sum of the widths is the total coverage and we just need to divide this by the original width of the whole sequence
+		rpt <- sum(width(cov)) / width(regions.ranges[i])
+		rpt
+	}
+
+	per
+}
+
+rmsk <- readRepeatMasker("hg18","ignore/ucsc/")
+
+repeatPer <- getRepeatPercent(regions.ranges)
+
+# distTSS
+
+
+# distTSE
 
 # -----------------------------------------------------------------------------
 
