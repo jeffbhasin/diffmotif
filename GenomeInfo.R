@@ -1,17 +1,32 @@
-#Given a Gene Symbol, Find Basic Facts About the Gene From the Annotation
-#Library to parse UCSC annotation tables for automated genomic context analysis
+# #############################################################################
+# Annotation functions for Rmotif
+# Author: Jeffrey Bhasin <jmb85@case.edu>
+# Created: 2013-03-11
+# #############################################################################
 
-#load libraries
-library(plyr)
+# =============================================================================
+# Packages and Globals
 
-#########################################
-# Functions
-#########################################
+# =============================================================================
+
+# =============================================================================
+# Utility
+
+# -----------------------------------------------------------------------------
+# Table reading function
+# Input: path to flatfile table
+# Output: dataframe of table
 read.table.ucsc <- function(path)
 {
 	#one function to read in all tables exported from UCSC the same way
 	read.table(file=path, comment.char="", header=TRUE, stringsAsFactors=FALSE, sep="\t", quote="")
 }
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Table reading function for big tables - autodetects types from first 5 rows
+# Input: path to flatfile table
+# Output: dataframe of table
 read.table.ucsc.big <- function(path)
 {
 	#detects colClasses on first 5 rows to speed up a big read in
@@ -20,78 +35,30 @@ read.table.ucsc.big <- function(path)
 	tabAll <- read.table(file=path, comment.char="", header=TRUE, stringsAsFactors=FALSE, sep="\t", quote="", colClasses = classes)
 	tabAll
 }
-readEnsemblAnnotation <- function()
-{
-	#downloaded from UCSC genome browser "tables" page
-	ensGene.path <- "ensGene.txt"
-	ensemblToGeneName.path <- "ensemblToGeneName.txt"
-	ccdsInfo.path <- "ccdsInfo.txt"
+# -----------------------------------------------------------------------------
 
-	#read in annotation tables
-	ensGene <- read.table(file=ensGene.path, comment.char="", header=TRUE, stringsAsFactors=FALSE)
-	ensemblToGeneName <- read.table(file=ensemblToGeneName.path, comment.char="", header=TRUE, stringsAsFactors=FALSE)
-	names(ensemblToGeneName) <- c("name","symbol")
-	ccdsInfo <- read.table(file=ccdsInfo.path, comment.char="", header=TRUE, stringsAsFactors=FALSE)
 
-	#how many pairs of transcript IDs and names?
-	nNamePairs <- nrow(ensemblToGeneName)
-	nNamePairs
+# =============================================================================
 
-	#how many unique named genes?
-	nUniqueGeneSymbols <- length(levels(factor(ensemblToGeneName$value)))
-	nUniqueGeneSymbols
+# =============================================================================
+# Readers to create annotation tables as R objects
 
-	#how many unique transcript IDs?
-	nUniqueIDs <- length(levels(factor(ensemblToGeneName$name)))
-	nUniqueIDs
-
-	#how many unique trancript IDs in ensGene?
-	ensGene.nUniqueIDs <- length(levels(factor(ensGene$name)))
-	ensGene.nUniqueIDs
-
-	#do all ensGene transcript IDs match those in the name map table?
-	table(ensGene$name %in% ensemblToGeneName$name)
-
-	#combine names into ensGene
-	ens.ann <- join(ensGene,ensemblToGeneName,by="name",type="left")
-
-	#how many consensus coding sequences are there?
-	nccds <- length(levels(factor(ccdsInfo$X.ccds)))
-	nccds
-
-	ccdsInfo <- data.frame(name=ccdsInfo$mrnaAcc,ccds=ccdsInfo$X.ccds,stringsAsFactors=FALSE)
-
-	#combine consensus coding sequence into ensGene - labels which variant is consensus for gene symbols that appear twice
-	ens.ann <- join(ens.ann,ccdsInfo,by="name",type="left")	
-
-	#convert coordinates to 1-based from UCSC's 0-based backend
-	ens.ann$txStart <- ens.ann$txStart + 1
-
-	ens.ann$cdsStart <- ens.ann$cdsStart + 1
-
-	#not going to add the offet to exons at this point, better to do so when we actually parse the exons to save time
-
-	ens.ann
-}
-
-downloadUCSCAnnotation <- function()
-{
-	#http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/knownGene.txt.gz
-	#download latest versions, gunzip, then diff with latest and tell me if there has been an update or not, if there has been, save these new versions with the data appended
-}
-
-readUCSCAnnotation <- function(genome="hg19")
+# -----------------------------------------------------------------------------
+# Read UCSC table files from disk and join all related tables
+# Input: genome id, path with trailing "/"
+# Output: joined annotation table dataframe (one row per gene isoform)
+readUCSCAnnotation <- function(genome="hg19",path="")
 {
 	#load downloaded tables
-	knownGene.path <- paste(genome,".knownGene.txt",sep="")
-	knownCanonical.path <- paste(genome,".knownCanonical.txt",sep="")
-	kgXref.path <- paste(genome,".kgXref.txt",sep="")
-	cytoBand.path <- paste(genome,".cytoBand.txt",sep="")
+	knownGene.path <- paste(path,genome,".knownGene.txt",sep="")
+	knownCanonical.path <- paste(path,genome,".knownCanonical.txt",sep="")
+	kgXref.path <- paste(path,genome,".kgXref.txt",sep="")
+	cytoBand.path <- paste(path,genome,".cytoBand.txt",sep="")
 
 	knownGene <- read.table.ucsc(knownGene.path)
 	knownCanonical <- read.table.ucsc(knownCanonical.path)
 	kgXref <- read.table.ucsc(kgXref.path)
-	cytoBand <- read.table.ucsc(cytoBand.path)
+	cytoBand <- read.table.ucsc.big(cytoBand.path)
 
 	#join in gene symbols
 	kg.sub <- knownGene
@@ -130,209 +97,273 @@ readUCSCAnnotation <- function(genome="hg19")
 	#join cyto map data back into main annotation by id
 	kg.ann <- join(kg.ann,cyto.map,by="name",type="left")
 
+	#add 1-based start coordinate column to remind viewer about this aspect of UCSC data
+	#all ucsc start coords are 0 based and this code maintains that
+	kg.ann$txStart.1based <- kg.ann$txStart + 1
 
-	#convert 0-based start coordinates to 1-based
-	kg.ann$txStart <- kg.ann$txStart + 1
-
-	kg.ann$cdsStart <- kg.ann$cdsStart + 1
+	kg.ann$cdsStart.1based <- kg.ann$cdsStart + 1
 
 	kg.ann
 }
+# -----------------------------------------------------------------------------
 
-getAll <- function(ann,gene.symbol)
+# ----------------------------------------------------------------------------
+# Parse exon lists
+# Input: data.frame from annotation reader
+# Output: data.frame with each row representing an exon range
+parseExons <- function(ann)
 {
-	ann[ann$geneSymbol==gene.symbol,]
+	#split by chrs to make it go faster
+	chrs <- unique(ann$chrom)
+
+	#my.ann <- ann[ann$chrom=="chr1",]	
+
+	# parse out exon lists to give regions list where each individual exon is a range
+
+	#ex <- foreach(j=1:length(chrs))
+	ex <- foreach(j=1:length(chrs),.verbose=TRUE,.combine="rbind") %dopar%
+	{
+		my.ann <- ann[ann$chrom==chrs[j],]
+		foreach(i=1:nrow(my.ann),.verbose=FALSE,.combine="rbind") %do%
+		{
+			chr <- my.ann[i,]$chrom
+			starts <- as.numeric(unlist(strsplit(my.ann[i,]$exonStarts,",")))
+			# correct for UCSC's 0-based system
+			starts <- starts + 1
+			ends <- as.numeric(unlist(strsplit(my.ann[i,]$exonEnds,",")))
+
+			data.frame(chr=chr,start=starts,end=ends)
+		}
+	}
+
+
+	ex
 }
 
-getGenePosition <- function(ann,gene.symbol)
+# ----------------------------------------------------------------------------
+
+readRepeatMasker <- function(genome,path)
 {
-	#returns coordinates for canonical splice variant
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	data.frame(this.ann$chrom,this.ann$txStart,this.ann$txEnd)
-}
-
-getGeneCytoBands <- function(ann,gene.symbol)
-{
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	data.frame(this.ann$cytoBandSpan,this.ann$cytoBandStart,this.ann$cytoBandEnd)
-
-}
-
-getGeneSize <- function(ann,gene.symbol)
-{
-	#size of canonical splice variant
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	this.ann$txEnd-this.ann$txStart	
-}
-
-getExonNumber <- function(ann,gene.symbol)
-{
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	this.ann$exonCount
-}
-
-getIntrons <- function(ann,gene.symbol)
-{
-	#list of intron coordinates
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	
-	#introns should just be the negative ranges of the exons
-	exons <- getExons(ann,gene.symbol)
-
-	exons.ranges <- IRanges(start=exons$exonStart,end=exons$exonEnd)
-	exons.gaps <- gaps(exons.ranges)
-
-	data.frame(intronStart=start(exons.gaps),intronEnd=end(exons.gaps),intronSize=width(exons.gaps)+1)
-}
-
-getExons <- function(ann,gene.symbol)
-{
-	#list of exon coordinates
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	starts <- unlist(strsplit(this.ann$exonStarts,","))
-	starts <- as.numeric(starts)+1
-	ends <- as.numeric(unlist(strsplit(this.ann$exonEnds,",")))
-	sizes <- ends-starts	
-
-	data.frame(exonStart=starts,exonEnd=ends,exonSize=sizes)
-}
-
-getFlankingGenes <- function(ann,gene.symbol,flankSize=1000)
-{
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	chr <- this.ann$chrom
-	start <- as.numeric(this.ann$txStart) - as.numeric(flankSize)
-	end <- as.numeric(this.ann$txEnd) + as.numeric(flankSize)
-
-	#make Granges for all other canonical genes on this chr
-	ann.canon <- ann[which(ann$canonical=="1"),]
-	ann.ranges <- with(ann.canon, GRanges(seqnames=chrom,ranges=IRanges(start=txStart, end=txEnd), name=name, geneSymbol=geneSymbol, strand=strand))
-
-	test.range <- GRanges(seqnames=chr,ranges=IRanges(start=start,end=end))
-
-	subsetByOverlaps(ann.ranges,test.range)
-	
-
-}
-
-getSpliceVariants <- function(ann,gene.symbol)
-{
-	this.ann <- ann[ann$geneSymbol==gene.symbol,]
-	data.frame(name=this.ann$name,txStart=this.ann$txStart,txEnd=this.ann$txEnd,cdsStart=this.ann$cdsStart,cdsEnd=this.ann$cdsEnd,exonCount=this.ann$exonCount,refmRNA=this.ann$mRNA,canonical=this.ann$canonical)
-}
-
-readRepeatMasker <- function(genome)
-{
-	rmsk.path <- paste(genome,".rmsk.txt",sep="")
+	rmsk.path <- paste(path,genome,".rmsk.txt",sep="")
 	rmsk <- read.table.ucsc.big(rmsk.path)
 	rmsk
 }
 
-getRepeats <- function(rmsk,chr,start,end)
+# =============================================================================
+
+# =============================================================================
+# Simple Overlap Counts
+# -----------------------------------------------------------------------------
+# Counts of overlapping gene isoforms
+# Input: genomic ranges object
+# Output: vector of counts of how many gene isoforms overlap with region
+getGenicOverlap <- function(regions.ranges, ann)
 {
-	#microsatellites, dups, repeatmask percent? what to look at?
-	#using data from RepeatMasker
-
-	#subset to the right chr
-	rmsk.sub <- rmsk[rmsk$genoName==chr,]
-
-	#subset to all regions within the range
-	rmsk.region <- rmsk.sub[(rmsk.sub$genoStart>=start) & (rmsk.sub$genoEnd<=end),]
-
-	rmsk.out <- rmsk.region
-
-	rmsk.out
+	ann.ranges <- with(ann, GRanges(seqnames=chrom,ranges=IRanges(start=txStart.1based,end=txEnd)))
+	overlap <- countOverlaps(regions.ranges,ann.ranges)
+	#overlap[!is.na(overlap)] <- 1
+	#overlap[is.na(overlap)] <- 0
+	overlap
 }
 
-getRepeatsIntronic <- function()
+# -----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# List of gene names overlapped by each range
+# Input:
+# Output: one column with a list of overlapping gene symbols for each row in the query regions
+getGenicOverlapGenes <- function(regions.ranges, ann)
 {
-	#use Granges to intersect intron ranges with the repeat ranges
+	ann.ranges <- with(ann, GRanges(seqnames=chrom,ranges=IRanges(start=txStart.1based,end=txEnd)))
+	overlap <- findOverlaps(regions.ranges,ann.ranges)
+	#overlap[!is.na(overlap)] <- 1
+	#overlap[is.na(overlap)] <- 0
+
+	overlap <- as.data.frame(overlap)
+	overlap$name <- ann[overlap$subjectHits,]$geneSymbol
+
+	out <- foreach(i=1:length(regions.ranges),.verbose=FALSE,.combine="c") %do%
+	{
+		hits <- overlap[overlap$queryHits==i,]
+		genes <- unique(hits$name)
+		paste(genes,collapse=", ")
+	}
+
+	out
 }
 
-getRepeatsExonic <- function()
-{
+# -----------------------------------------------------------------------------
 
+# ----------------------------------------------------------------------------
+# Find overlaps with upstream regions of genes
+# Input: before = number bps upstream of TSS, after = number bps downstream of TSS
+# Output:
+getUpstreamOverlap <- function(regions.ranges, ann, before=1000, after=500)
+{
+	# add offsets, accounting for strandedness
+	ups <- with(ann,data.frame(chr=chrom,start=txStart.1based,end=txEnd,strand=strand))
+	ups$start.us <- NA
+	ups$end.us <- NA
+
+	ups[ups$strand=="+",]$start.us <- ups[ups$strand=="+",]$start - before
+	ups[ups$strand=="+",]$end.us <- ups[ups$strand=="+",]$start + after
+
+
+	ups[ups$strand=="-",]$start.us <- ups[ups$strand=="-",]$end - after
+	ups[ups$strand=="-",]$end.us <- ups[ups$strand=="-",]$end + before
+
+	ann.ranges <- with(ups, GRanges(seqnames=chr,ranges=IRanges(start=start.us,end=end.us)))
+	overlap <- countOverlaps(regions.ranges,ann.ranges)
+	#overlap[!is.na(overlap)] <- 1
+	#overlap[is.na(overlap)] <- 0
+	overlap
+}
+# -----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# Find overlaps with downstream regions of genes
+# Input: before = number bps upstream of txEnd, after = number bps downstream of txEnd
+# Output:
+getDownstreamOverlap <- function(regions.ranges, ann, before=500, after=1000)
+{
+	# add offsets, accounting for strandedness
+	downs <- with(ann,data.frame(chr=chrom,start=txStart.1based,end=txEnd,strand=strand))
+	downs$start.ds <- NA
+	downs$end.ds <- NA
+
+	downs[downs$strand=="+",]$start.ds <- downs[downs$strand=="+",]$end - before
+	downs[downs$strand=="+",]$end.ds <- downs[downs$strand=="+",]$end + after
+
+
+	downs[downs$strand=="-",]$start.ds <- downs[downs$strand=="-",]$start - after
+	downs[downs$strand=="-",]$end.ds <- downs[downs$strand=="-",]$start + before
+
+	ann.ranges <- with(downs, GRanges(seqnames=chr,ranges=IRanges(start=start.ds,end=end.ds)))
+	overlap <- countOverlaps(regions.ranges,ann.ranges)
+	#overlap[!is.na(overlap)] <- 1
+	#overlap[is.na(overlap)] <- 0
+	overlap
+}
+# -----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# 3' UTR Overlaps (gaps between cdsEnd and txEnd)
+# Input:
+# Output:
+get3primeUTROverlap <- function(regions.ranges, ann)
+{
+	# filter for genes with a 3' UTR, accounting for strandedness
+	utr <- with(ann,data.frame(chr=chrom, txStart=txStart.1based, txEnd=txEnd, strand=strand, cdsStart=cdsStart.1based, cdsEnd=cdsEnd))
+
+	# filter non-coding transcripts which UCSC codes as cdsStart==cdsEnd
+	utr <- utr[utr$cdsStart!=(utr$cdsEnd+1),]
+
+	# filter out if cdsEnd == txEnd for (+) strand
+	utr.p <- utr[(utr$strand=="+")&(utr$cdsEnd!=utr$txEnd),]
+
+	# filter out if cdsStart == txStart for (-) strand because these are really the ends
+	utr.m <- utr[(utr$strand=="-")&(utr$cdsStart!=utr$txStart),]
+
+	# build list of utr regions
+	utr.p$start.utr <- utr.p$cdsEnd
+	utr.p$end.utr <- utr.p$txEnd
+
+	utr.m$start.utr <- utr.m$txStart
+	utr.m$end.utr <- utr.m$cdsStart
+
+	reg <- rbind(utr.p,utr.m)
+
+	ann.ranges <- with(reg, GRanges(seqnames=chr,ranges=IRanges(start=start.utr,end=end.utr)))
+	overlap <- countOverlaps(regions.ranges,ann.ranges)
+	#overlap[!is.na(overlap)] <- 1
+	#overlap[is.na(overlap)] <- 0
+	overlap
+}
+# -----------------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------------
+# Overlaps with exons
+# Input: exon table from parseExons
+# Output:
+getExonOverlap <- function(regions.ranges, ann.ex)
+{
+	ann.ranges <- with(ann.ex, GRanges(seqnames=chr,ranges=IRanges(start=start,end=end)))
+	overlap <- countOverlaps(regions.ranges,ann.ranges)
+	#overlap[!is.na(overlap)] <- 1
+	#overlap[is.na(overlap)] <- 0
+	overlap
+}
+# -----------------------------------------------------------------------------
+
+
+# =============================================================================
+
+# =============================================================================
+# Derive Sequence Context Variables - useful for propensity score matching
+
+getRepeatPercent <- function(regions.ranges,rmsk)
+{
+	#intersect with rmsk table, then collapse into nonoverlapping regions covering all repeats - want the % coverage of these regions versus the entire sequence length
+
+	rmsk.ranges <- with(rmsk,GRanges(seqnames=genoName,ranges=IRanges(start=genoStart+1,end=genoEnd)))
+
+	#per <- foreach(i=1:length(regions.ranges),.combine="c") %do%
+	per <- foreach(i=1:length(regions.ranges),.combine="c",.verbose=TRUE) %dopar%
+	{
+		cov <- intersect(regions.ranges[i],rmsk.ranges)
+		cov <- reduce(cov)
+		#after reduction, the sum of the widths is the total coverage and we just need to divide this by the original width of the whole sequence
+		rpt <- sum(width(cov)) / width(regions.ranges[i])
+		rpt
+	}
+
+	per
 }
 
-getRepeatsSummary <- function(repeats)
+getDistTSS <- function(regions.ranges,ann)
 {
-	ddply(repeats,.(repClass),nrow)
+	# create ranges object with just the TSS
+	# need to use txEnd for genes on the "-" strand
+	ann.starts <- with(ann,data.frame(chrom,txStart.1based,txEnd,strand))
+
+	ann.starts$tss <- NA
+	ann.starts[ann.starts$strand=="+",]$tss <- ann.starts[ann.starts$strand=="+",]$txStart.1based
+	ann.starts[ann.starts$strand=="-",]$tss <- ann.starts[ann.starts$strand=="-",]$txEnd
+
+	ann.ranges <- with(ann.starts, GRanges(seqnames=chrom,ranges=IRanges(start=tss,end=tss)))
+
+	#overlap <- countOverlaps(regions.ranges,ann.ranges)
+
+	# if the overlaps number is zero, we need to find the nearest region
+
+	#nearest(regions.ranges,ann.ranges)
+
+	dtss <- as.data.frame(distanceToNearest(regions.ranges,ann.ranges))
+	dtss[,3]
 }
 
-getConservation <- function()
+getDistTSE <- function(regions.ranges,ann)
 {
-	#one number to summarize between species? percent id? alignment scores?
+	# create ranges object with just the TSS
+	# need to use txEnd for genes on the "-" strand
+	ann.starts <- with(ann,data.frame(chrom,txStart.1based,txEnd,strand))
+
+	ann.starts$tse <- NA
+	ann.starts[ann.starts$strand=="+",]$tse <- ann.starts[ann.starts$strand=="+",]$txEnd
+	ann.starts[ann.starts$strand=="-",]$tse <- ann.starts[ann.starts$strand=="-",]$txStart.1based
+
+	ann.ranges <- with(ann.starts, GRanges(seqnames=chrom,ranges=IRanges(start=tse,end=tse)))
+
+	#overlap <- countOverlaps(regions.ranges,ann.ranges)
+
+	# if the overlaps number is zero, we need to find the nearest region
+
+	#nearest(regions.ranges,ann.ranges)
+
+	dtse <- as.data.frame(distanceToNearest(regions.ranges,ann.ranges))
+	dtse[,3]
 }
 
-getExonConservation <- function()
-{
-}
 
-getIntronConservation <- function()
-{
-}
-
-getMouseOrtholog <- function(ann,gene.symbol)
-{
-	mmBlastTab.path <- "hg19.mmBlastTab.txt"
-	mmBlastTab <- read.table.ucsc(mmBlastTab.path)
-
-	#take best scoring match for our geneid
-	this.ann <- ann[which((ann$canonical=="1")&(ann$geneSymbol==gene.symbol)),]
-	matches <- mmBlastTab[mmBlastTab$X.query==this.ann$name,]
-	matches[order(matches$identity),]
-	mouse_id <- matches[1,]$target
-
-	mouse_id	
-}
-
-getGeneSymbol <- function(ann,gene.ucsc.id)
-{
-	this.ann <- ann[ann$name==gene.ucsc.id,]
-	this.ann$geneSymbol
-}
-
-#########################################
-# Usage
-#########################################
-
-#human stuff for APP
-ann <- readUCSCAnnotation("hg19")
-gene.symbol <- "APP"
-
-getAll(ann,gene.symbol)
-getGenePosition(ann,gene.symbol)
-getGeneCytoBands(ann,gene.symbol)
-getGeneSize(ann,gene.symbol)
-getExonNumber(ann,gene.symbol)
-
-introns <- getIntrons(ann,gene.symbol)
-introns[order(introns$intronSize),]
-
-getFlankingGenes(ann,gene.symbol,flankSize=1e6)
-
-rmsk <- readRepeatMasker("hg19")
-repeats <- getRepeats(rmsk,getGenePosition(ann,gene.symbol)[,1],getGenePosition(ann,gene.symbol)[,2],getGenePosition(ann,gene.symbol)[,3])
-repeats.summary <- getRepeatsSummary(repeats)
-
-#mouse stuff for APP ortholog
-mouse.ann <- readUCSCAnnotation("mm10")
-mouse.id <- getMouseOrtholog(ann,gene.symbol)
-mouse.gene <- getGeneSymbol(mouse.ann,mouse.id)
-
-getAll(mouse.ann,mouse.gene)
-getGenePosition(mouse.ann,mouse.gene)
-getGeneCytoBands(mouse.ann,mouse.gene)
-getGeneSize(mouse.ann,mouse.gene)
-getExonNumber(mouse.ann,mouse.gene)
-
-introns <- getIntrons(mouse.ann,mouse.gene)
-introns[order(introns$intronSize),]
-
-getFlankingGenes(mouse.ann,mouse.gene,flankSize=1e6)
-
-
-mouse.rmsk <- readRepeatMasker("mm10")
-repeats <- getRepeats(mouse.rmsk,getGenePosition(mouse.ann,mouse.gene)[,1],getGenePosition(mouse.ann,mouse.gene)[,2],getGenePosition(mouse.ann,mouse.gene)[,3])
-repeats.summary <- getRepeatsSummary(repeats)
-
+# =============================================================================

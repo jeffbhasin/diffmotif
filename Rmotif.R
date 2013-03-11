@@ -14,12 +14,34 @@ library(stringr)
 library(ggplot2)
 library(gridExtra)
 library(Matching)
+library(rms)
 library(doMC)
 
+source("GenomeInfo.R")
+
+###############################################
+## Utility
+###############################################
 ggplot.clean <- function()
 {
 	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
 }
+
+# -----------------------------------------------------------------------------
+# Calculate GC content of a DNAString
+# Input: DNAStringSet object
+# Output: Vector of GC contents
+getGC <- function(seq)
+{
+	g <- alphabetFrequency(seq)[,3]
+	c <- alphabetFrequency(seq)[,2]
+	a <- alphabetFrequency(seq)[,1]
+	t <- alphabetFrequency(seq)[,4]
+
+	gc <- (g+c) / (a+t+g+c)
+	gc
+}
+# -----------------------------------------------------------------------------
 
 ###############################################
 ## MEME Suite Interaction
