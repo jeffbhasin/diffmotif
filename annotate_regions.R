@@ -428,9 +428,59 @@ rmsk <- readRepeatMasker("hg18","ignore/ucsc/")
 repeatPer <- getRepeatPercent(regions.ranges)
 
 # distTSS
+getDistTSS <- function(regions.ranges,ann)
+{
+	# create ranges object with just the TSS
+	# need to use txEnd for genes on the "-" strand
+	ann.starts <- with(ann,data.frame(chrom,txStart.1based,txEnd,strand))
 
+	ann.starts$tss <- NA
+	ann.starts[ann.starts$strand=="+",]$tss <- ann.starts[ann.starts$strand=="+",]$txStart.1based
+	ann.starts[ann.starts$strand=="-",]$tss <- ann.starts[ann.starts$strand=="-",]$txEnd
+
+	ann.ranges <- with(ann.starts, GRanges(seqnames=chrom,ranges=IRanges(start=tss,end=tss)))
+
+	#overlap <- countOverlaps(regions.ranges,ann.ranges)
+
+	# if the overlaps number is zero, we need to find the nearest region
+
+	#nearest(regions.ranges,ann.ranges)
+
+	dtss <- as.data.frame(distanceToNearest(regions.ranges,ann.ranges))
+	dtss[,3]
+}
+distTSS <- getDistTSS(regions.ranges,ann)
 
 # distTSE
+getDistTSE <- function(regions.ranges,ann)
+{
+	# create ranges object with just the TSS
+	# need to use txEnd for genes on the "-" strand
+	ann.starts <- with(ann,data.frame(chrom,txStart.1based,txEnd,strand))
+
+	ann.starts$tse <- NA
+	ann.starts[ann.starts$strand=="+",]$tse <- ann.starts[ann.starts$strand=="+",]$txEnd
+	ann.starts[ann.starts$strand=="-",]$tse <- ann.starts[ann.starts$strand=="-",]$txStart.1based
+
+	ann.ranges <- with(ann.starts, GRanges(seqnames=chrom,ranges=IRanges(start=tse,end=tse)))
+
+	#overlap <- countOverlaps(regions.ranges,ann.ranges)
+
+	# if the overlaps number is zero, we need to find the nearest region
+
+	#nearest(regions.ranges,ann.ranges)
+
+	dtse <- as.data.frame(distanceToNearest(regions.ranges,ann.ranges))
+	dtse[,3]
+}
+distTSE <- getDistTSE(regions.ranges,ann)
+
+
+head(data.frame(seq.list,repeatPer,distTSS,distTSE))
+
+#write a file with these variables included
+#regions.annotated2 <- cbind(regions,repeatPer,genic,upstream,downstream,utr,exons,genic.genes)
+#write.csv(regions.annotated2,file="output/annotation/overlap_dms_covars.csv",row.names=FALSE)
 
 # -----------------------------------------------------------------------------
 
