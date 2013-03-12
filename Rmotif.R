@@ -464,8 +464,8 @@ plotSequenceQQ5 <- function(seq1,seq2,seq3,seq4,seq5,labels)
 }
 
 # -----------------------------------------------------------------------------
-# Plot histograms for arbitrary number of variables
-# Input: data frame with row for each sequence, vector of columns to use
+# Plot histograms in a grid for arbitrary number of variables
+# Input: data frame with row for each sequence, vector of columns to plot
 # Output: ggplot2 object
 plotCovarHistograms <- function(seq.meta,cols)
 {
@@ -490,8 +490,62 @@ plotCovarHistograms <- function(seq.meta,cols)
 	}
 	do.call(grid.arrange,p)
 }
+# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+# Plot overlapping histograms for any number of variables from 2 sets
+# Input: 2 data frames with row for each sequence, vector of columns to plot
+# Output: ggplot2 object
+plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols)
+{
+	# do we need arguments to take filtering and breaks options?
+	name1 <- "Target"
+	name2 <- "Reference"
+
+	breaks <- foreach(i=1:length(cols)) %do%
+	{
+		scale.max <- max(c(seq1.meta[,cols[i]],seq2.meta[,cols[i]]))
+		scale.min <- min(c(seq1.meta[,cols[i]],seq2.meta[,cols[i]]))
+		scale.bins <- 20
+		seq(from=scale.min,to=scale.max,length.out=scale.bins)
+	}
+
+	# calculate histograms
+	hists1 <- foreach(i=1:length(cols)) %do%
+	{
+		hist(seq1.meta[,cols[i]],breaks=breaks[[i]],plot=FALSE)
+	}
+	hists2 <- foreach(i=1:length(cols)) %do%
+	{
+		hist(seq2.meta[,cols[i]],breaks=breaks[[i]],plot=FALSE)
+	}
+
+	ggplot.hist.overlap <- function(h1,h2)
+	{
+		plot.data <- data.frame(bin=h1$mids,freq=h1$count/sum(h1$count),seq=name1)
+		plot.data <- rbind(plot.data,data.frame(bin=h2$mids,freq=h2$count/sum(h2$count),seq=name2))
+		ggplot(plot.data, aes(x=bin,y=freq,fill=seq)) + geom_bar(data=subset(plot.data,seq == name1), stat="identity",alpha=0.5) + geom_bar(data=subset(plot.data,seq == name2), stat="identity",alpha=0.5) + scale_fill_manual("", values = c("#007FFF","#FF007F")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
+	}
+
+	p <- list()
+	for(i in 1:length(cols))
+	{
+  		p[[i]] <- ggplot.hist.overlap(hists1[[i]], hists2[[i]]) + labs(title=names(seq.meta)[cols[i]]) + theme(legend.position = "none")
+	}
+	do.call(grid.arrange,p)
+}
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Plot histograms in a grid for arbitrary number of variables
+# Input: data frame with row for each sequence, vector of columns to plot
+# Output: ggplot2 object
+plotCovarQQ <- function(seq.meta,cols)
+{
+
+}
+# -----------------------------------------------------------------------------
+
 
 plotSequenceHistogramsResampled <- function(seq1,seq2,seq3)
 {

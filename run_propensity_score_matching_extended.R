@@ -119,8 +119,13 @@ seq1.meta <- data.frame(seq1.meta, repeatPer=seq1.repeatPer, distTSS=seq1.distTS
 seq2.meta <- data.frame(seq2.meta, repeatPer=seq2.repeatPer, distTSS=seq2.distTSS, distTSSCenter=seq2.distTSSCenter, distTSE=seq2.distTSE, distTSECenter=seq2.distTSECenter, freqCpG=seq2.freqCpG)
 
 # plot all variables
+cols <- c(2,3,7,8,9,10,11,12)
 png(filename="output/hists.covars.orig.png",width=1000,height=800,res=120)
 plotCovarHistograms(seq1.meta,cols)
+dev.off()
+# overlapping
+png(filename="output/hists.covars.orig.overlap.png",width=1000,height=800,res=120)
+plotCovarHistogramsOverlap(seq1.meta,seq2.meta,cols)
 dev.off()
 
 # -----------------------------------------------------------------------------
@@ -151,9 +156,17 @@ seq.ref.freqCpG <- getFreqCpG(seq.ref)
 seq.ref.meta.all <- data.frame(seq.ref.meta, repeatPer=seq.ref.repeatPer, distTSS=seq.ref.distTSS, distTSSCenter=seq.ref.distTSSCenter, distTSE=seq.ref.distTSE, distTSECenter=seq.ref.distTSECenter, freqCpG=seq.ref.freqCpG)
 
 # plot all variables
+# make bins - vectors of (min, max, bins)
 cols <- c(2,3,7,8,9,10,11,12)
+
+# overlapping
+png(filename="output/hists.covars.sizegc.overlap.png",width=1000,height=800,res=120)
+plotCovarHistogramsOverlap(seq1.meta,seq.ref.meta.all,cols)
+dev.off()
+
+# nonoverlapping
 png(filename="output/hists.covars.sizegc.png",width=1000,height=800,res=120)
-plotCovarHistograms(seq.ref.meta.all,cols)
+plotCovarHistograms(seq.ref.meta.all,cols,breaks)
 dev.off()
 
 # run FIMO
@@ -175,37 +188,44 @@ write.csv(results.sort,file="output/diffmotif.bkg.propensity.sizegc.usingfunctio
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# treat ~ gc + length + distTSS
-
-# draw seqs
-formula <- as.formula("treat ~ size + gc + distTSS")
-seq.ref <- drawBackgroundSetPropensity(seq1,seq1.meta,seq2,seq2.meta,formula)
-
-# run FIMO
-sim.nSeqs <- length(seq.ref)
-unlink("output/simseq.fasta")
-writeXStringSet(seq.ref, "output/simseq.fasta", append=FALSE, format="fasta")
-unlink("output/fimo_out_sim")
-runFIMO("sim","output/simseq.fasta",motif.path)
-fimo.out.sim <- readFIMO("output/fimo_out_sim/fimo.txt")
-fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
-
-# binomial test
-results <- calcEnrichmentBinom(fimo.out.counts,seq1.nSeqs,fimo.out.sim.counts,sim.nSeqs)
-results.sort <- results[order(results$pvalue, decreasing=FALSE),]
-head(results.sort)
-tail(results.sort)
-write.csv(results.sort,file="output/diffmotif.bkg.propensity.sizegc.usingfunction.csv",row.names=FALSE)
-
-# -----------------------------------------------------------------------------
-
-
-# -----------------------------------------------------------------------------
 # treat ~ gc + length + repeatPer
 
 # draw seqs
 formula <- as.formula("treat ~ size + gc + repeatPer")
 seq.ref <- drawBackgroundSetPropensity(seq1,seq1.meta,seq2,seq2.meta,formula)
+
+# calculate covars for drawn seqs
+seq.ref.meta <- data.frame(name=names(seq.ref),size=width(seq.ref),gc=getGC(seq.ref))
+new <- data.frame(do.call('rbind', strsplit(as.character(seq.ref.meta$name),'-',fixed=TRUE)))
+names(new) <- c("chr","start","end")
+seq.ref.meta <- cbind(seq.ref.meta,new)
+seq.ref.meta$start <- as.numeric(as.character(seq.ref.meta$start))
+seq.ref.meta$end <- as.numeric(as.character(seq.ref.meta$end))
+seq.ref.ranges <- with(seq.ref.meta,GRanges(seqnames=chr,ranges=IRanges(start=start,end=end)))
+seq.ref.repeatPer <- getRepeatPercentFast(seq.ref.ranges,rmsk)
+seq.ref.distTSS <- getDistTSS(seq.ref.ranges,ann)
+seq.ref.distTSE <- getDistTSE(seq.ref.ranges,ann)
+seq.ref.distTSSCenter <- getDistTSSCenter(seq.ref.ranges,ann)
+seq.ref.distTSECenter <- getDistTSECenter(seq.ref.ranges,ann)
+seq.ref.freqCpG <- getFreqCpG(seq.ref)
+
+# combine into our covariate dataframe
+seq.ref.meta.all <- data.frame(seq.ref.meta, repeatPer=seq.ref.repeatPer, distTSS=seq.ref.distTSS, distTSSCenter=seq.ref.distTSSCenter, distTSE=seq.ref.distTSE, distTSECenter=seq.ref.distTSECenter, freqCpG=seq.ref.freqCpG)
+
+# plot all variables
+# make bins - vectors of (min, max, bins)
+cols <- c(2,3,7,8,9,10,11,12)
+
+# overlapping
+png(filename="output/hists.covars.size-gc-rep.overlap.png",width=1000,height=800,res=120)
+plotCovarHistogramsOverlap(seq1.meta,seq.ref.meta.all,cols)
+dev.off()
+
+# nonoverlapping
+png(filename="output/hists.covars.size-gc-rep.png",width=1000,height=800,res=120)
+plotCovarHistograms(seq.ref.meta.all,cols)
+dev.off()
+
 
 # run FIMO
 sim.nSeqs <- length(seq.ref)
@@ -230,6 +250,12 @@ write.csv(results.sort,file="output/diffmotif.bkg.propensity.size-gc-repeat.csv"
 # treat ~ gc + length + repeatPer + distTSS
 
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# treat ~ gc + length + repeatPer + distTSS + freqCpG
+
+# -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 # treat ~ gc + length + repeatPer + distTSE
