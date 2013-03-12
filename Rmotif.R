@@ -463,18 +463,46 @@ plotSequenceQQ5 <- function(seq1,seq2,seq3,seq4,seq5,labels)
 	grid.arrange(g1, distance.stats.grob, ncol=1,heights=c(4/5,1/5))
 }
 
-plotSequenceQQR5 <- function(seq1,seq2,seq3,seq4,seq5,labels)
+# -----------------------------------------------------------------------------
+# Plot histograms for arbitrary number of variables
+# Input: data frame with row for each sequence, vector of columns to use
+# Output: ggplot2 object
+plotCovarHistograms <- function(seq.meta,cols)
+{
+	# do we need arguments to take filtering and breaks options?
+
+	# calculate histograms
+	hists <- foreach(i=1:length(cols)) %do%
+	{
+		hist(seq.meta[,cols[i]],plot=FALSE)
+	}
+
+	ggplot.hist <- function(h)
+	{
+		plot.data <- data.frame(bin=h$mids,freq=h$count/sum(h$count))
+		ggplot(plot.data, aes(x=bin,y=freq)) + geom_bar(data=plot.data, stat="identity",alpha=0.8) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
+	}
+
+	p <- list()
+	for(i in 1:length(cols))
+	{
+  		p[[i]] <- ggplot.hist(hists[[i]]) + labs(title=names(seq.meta)[cols[i]])
+	}
+	do.call(grid.arrange,p)
+}
+
+# -----------------------------------------------------------------------------
+
+plotSequenceHistogramsResampled <- function(seq1,seq2,seq3)
 {
 	seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
 	seq2.meta <- data.frame(name=names(seq2),size=width(seq2),gc=getGC(seq2))
 	resamp <- data.frame(name=names(seq3),size=width(seq3),gc=getGC(seq3))
-	resamp2 <- data.frame(name=names(seq4),size=width(seq4),gc=getGC(seq4))
-	resamp3 <- data.frame(name=names(seq5),size=width(seq5),gc=getGC(seq5))
 
 	#filter anything in seq2 bigger than the max in seq1
 	seq2.meta <- seq2.meta[seq2.meta$size<=max(seq1.meta$size),]
 
-	breaks <- seq(0,max(seq1.meta$size,resamp3$size)+100,by=100)
+	breaks <- seq(0,max(seq1.meta$size,seq2.meta$size,resamp$size)+100,by=100)
 	breaks.gc <- seq(0,1,by=0.05)
 
 	h1 <- hist(seq1.meta$size,breaks=breaks,plot=FALSE)
@@ -485,57 +513,31 @@ plotSequenceQQR5 <- function(seq1,seq2,seq3,seq4,seq5,labels)
 	h4 <- hist(seq2.meta$gc,breaks=breaks.gc,plot=FALSE)
 	h4.1 <- hist(resamp$gc,breaks=breaks.gc,plot=FALSE)
 
-	h2.2 <- hist(resamp2$size,breaks=breaks,plot=FALSE)
-	h4.2 <- hist(resamp2$gc,breaks=breaks.gc,plot=FALSE)
-
-	h2.3 <- hist(resamp3$size,breaks=breaks,plot=FALSE)
-	h4.3 <- hist(resamp3$gc,breaks=breaks.gc,plot=FALSE)
-
-	####QQ Plots + Distance Metric Data Table
-	#get R^2 values on the QQ plots
-	qqcor <- function(c1,c2)
+	ggplot.hist.overlap <- function(h1,h2,name1="Hist 1",name2="Hist 2",xlab="",ylab="",main="")
 	{
-		qqd <- qqplot(c1, c2, plot.it=FALSE)
-		cor(qqd$x,qqd$y)
+		plot.data <- data.frame(bin=h1$mids,freq=h1$count/sum(h1$count),seq=name1)
+		plot.data <- rbind(plot.data,data.frame(bin=h2$mids,freq=h2$count/sum(h2$count),seq=name2))
+		ggplot(plot.data, aes(x=bin,y=freq,fill=seq)) + geom_bar(data=subset(plot.data,seq == name1), stat="identity",alpha=0.5) + geom_bar(data=subset(plot.data,seq == name2), stat="identity",alpha=0.5) + scale_fill_manual("", values = c("#007FFF","#FF007F")) + labs(x=xlab, y=ylab, title = main) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
 	}
 
-#	qqcorlm <- function(c1,c2)
-#	{
-#		lm1 <- lm(0 + qqd$y ~ 0 + qqd$x)
-#		s <- summary(lm1)
-#		s$r.squared
-#png(filename="tmp.png",res=120)
-#plot(qqd$x,qqd$y)
-#abline(0, coef(lm1))
-#dev.off()
+	p1 <- ggplot.hist.overlap(h1,h2,"Target","Background","Bin Mid","Prob.","Size: Original")
+	p2 <- ggplot.hist.overlap(h1,h2.1,"Target","Background","Bin Mid","Prob.","Size: Resampled") + theme(legend.position = "none")
+	p3 <- ggplot.hist.overlap(h3,h4,"Target","Background","Bin Mid","Prob.","GC: Original") + theme(legend.position = "none")
+	p4 <- ggplot.hist.overlap(h3,h4.1,"Target","Background","Bin Mid","Prob.","GC: Resampled") + theme(legend.position="none")
+	#p5 <- ggplot.hist.overlap(h1,h2.2,"Target","Background","Bin Mid","Prob.","Size: \"IS\" Resamp") + theme(legend.position = "none")
+	#p6 <- ggplot.hist.overlap(h3,h4.2,"Target","Background","Bin Mid","Prob.","GC: \"IS\" Resamp") + theme(legend.position="none")
 
-#	}
+	#g1 <- arrangeGrob(p1 + theme(legend.position = "none"),p2,p5,p3,p4,p6,ncol=3)
+	g1 <- arrangeGrob(p1 + theme(legend.position = "none"),p2,p3,p4,ncol=2)
 
-	dist1 <- round(c(qqcor(seq1.meta$size,seq2.meta$size), qqcor(seq1.meta$size,resamp$size), qqcor(seq1.meta$size,resamp2$size), qqcor(seq1.meta$size,resamp3$size)),digits=3)
-	dist2 <- round(c(qqcor(seq1.meta$gc,seq2.meta$gc), qqcor(seq1.meta$gc,resamp$gc), qqcor(seq1.meta$gc,resamp2$gc), qqcor(seq1.meta$gc,resamp3$gc)),digits=3)
-	distance.stats <- data.frame(size.r=dist1,gc.r=dist2,row.names=labels)
+	#plot overlapping hists
+
+	tmp <- ggplot_gtable(ggplot_build(p1))
+	leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+	legend <- tmp$grobs[[leg]]
 
 
-	ggplot.qqplot.geom <- function(data1,data2)
-	{
-		d <- as.data.frame(qqplot(data1, data2, plot.it=FALSE))
-		ggplot(d) + geom_point(aes(x=x, y=y),stat = "identity", position = "identity")
-	}
-
-	d <- data.frame(as.data.frame(qqplot(seq1.meta$size, seq2.meta$size, plot.it=FALSE)),Sequences=labels[1])
-	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp$size, plot.it=FALSE)),Sequences=labels[2]))
-	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp2$size, plot.it=FALSE)),Sequences=labels[3]))
-	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$size, resamp3$size, plot.it=FALSE)),Sequences=labels[4]))
-	p1 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="Size") + geom_abline(slope = 1, intercept=0)
-	d <- data.frame(as.data.frame(qqplot(seq1.meta$gc, seq2.meta$gc, plot.it=FALSE)),Sequences=labels[1])
-	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp$gc, plot.it=FALSE)),Sequences=labels[2]))
-	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp2$gc, plot.it=FALSE)),Sequences=labels[3]))
-	d <- rbind(d,data.frame(as.data.frame(qqplot(seq1.meta$gc, resamp3$gc, plot.it=FALSE)),Sequences=labels[4]))
-	p2 <- ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences),stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background",title="GC") + geom_abline(slope = 1, intercept=0)
-	g1 <- arrangeGrob(p1,p2,ncol=2)
-
-	distance.stats.grob <- arrangeGrob(tableGrob(distance.stats))
-	grid.arrange(g1, distance.stats.grob, ncol=1,heights=c(4/5,1/5))
+	grid.arrange(g1, legend, widths=c(6/7,1/7), nrow=1)
 }
 
 

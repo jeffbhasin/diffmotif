@@ -119,7 +119,9 @@ seq1.meta <- data.frame(seq1.meta, repeatPer=seq1.repeatPer, distTSS=seq1.distTS
 seq2.meta <- data.frame(seq2.meta, repeatPer=seq2.repeatPer, distTSS=seq2.distTSS, distTSSCenter=seq2.distTSSCenter, distTSE=seq2.distTSE, distTSECenter=seq2.distTSECenter, freqCpG=seq2.freqCpG)
 
 # plot all variables
-
+png(filename="output/hists.covars.orig.png",width=1000,height=800,res=120)
+plotCovarHistograms(seq1.meta,cols)
+dev.off()
 
 # -----------------------------------------------------------------------------
 
@@ -129,6 +131,30 @@ seq2.meta <- data.frame(seq2.meta, repeatPer=seq2.repeatPer, distTSS=seq2.distTS
 # draw seqs
 formula <- as.formula("treat ~ size + gc")
 seq.ref <- drawBackgroundSetPropensity(seq1,seq1.meta,seq2,seq2.meta,formula)
+
+# calculate covars for drawn seqs
+seq.ref.meta <- data.frame(name=names(seq.ref),size=width(seq.ref),gc=getGC(seq.ref))
+new <- data.frame(do.call('rbind', strsplit(as.character(seq.ref.meta$name),'-',fixed=TRUE)))
+names(new) <- c("chr","start","end")
+seq.ref.meta <- cbind(seq.ref.meta,new)
+seq.ref.meta$start <- as.numeric(as.character(seq.ref.meta$start))
+seq.ref.meta$end <- as.numeric(as.character(seq.ref.meta$end))
+seq.ref.ranges <- with(seq.ref.meta,GRanges(seqnames=chr,ranges=IRanges(start=start,end=end)))
+seq.ref.repeatPer <- getRepeatPercentFast(seq.ref.ranges,rmsk)
+seq.ref.distTSS <- getDistTSS(seq.ref.ranges,ann)
+seq.ref.distTSE <- getDistTSE(seq.ref.ranges,ann)
+seq.ref.distTSSCenter <- getDistTSSCenter(seq.ref.ranges,ann)
+seq.ref.distTSECenter <- getDistTSECenter(seq.ref.ranges,ann)
+seq.ref.freqCpG <- getFreqCpG(seq.ref)
+
+# combine into our covariate dataframe
+seq.ref.meta.all <- data.frame(seq.ref.meta, repeatPer=seq.ref.repeatPer, distTSS=seq.ref.distTSS, distTSSCenter=seq.ref.distTSSCenter, distTSE=seq.ref.distTSE, distTSECenter=seq.ref.distTSECenter, freqCpG=seq.ref.freqCpG)
+
+# plot all variables
+cols <- c(2,3,7,8,9,10,11,12)
+png(filename="output/hists.covars.sizegc.png",width=1000,height=800,res=120)
+plotCovarHistograms(seq.ref.meta.all,cols)
+dev.off()
 
 # run FIMO
 sim.nSeqs <- length(seq.ref)
