@@ -307,18 +307,64 @@ getRepeatPercent <- function(regions.ranges,rmsk)
 	#intersect with rmsk table, then collapse into nonoverlapping regions covering all repeats - want the % coverage of these regions versus the entire sequence length
 
 	rmsk.ranges <- with(rmsk,GRanges(seqnames=genoName,ranges=IRanges(start=genoStart+1,end=genoEnd)))
+	rmsk.ranges <- reduce(rmsk.ranges)
 
 	#per <- foreach(i=1:length(regions.ranges),.combine="c") %do%
 	per <- foreach(i=1:length(regions.ranges),.combine="c",.verbose=TRUE) %dopar%
 	{
+		print(i)
 		cov <- intersect(regions.ranges[i],rmsk.ranges)
-		cov <- reduce(cov)
+		#cov <- reduce(cov)
 		#after reduction, the sum of the widths is the total coverage and we just need to divide this by the original width of the whole sequence
 		rpt <- sum(width(cov)) / width(regions.ranges[i])
 		rpt
 	}
 
 	per
+}
+
+getRepeatPercentFast <- function(regions.ranges,rmsk)
+{
+	#intersect with rmsk table, then collapse into nonoverlapping regions covering all repeats - want the % coverage of these regions versus the entire sequence length
+
+	rmsk.ranges <- with(rmsk,GRanges(seqnames=genoName,ranges=IRanges(start=genoStart+1,end=genoEnd)))
+	rmsk.ranges <- reduce(rmsk.ranges)
+
+	cov <- intersect(regions.ranges,rmsk.ranges)
+	cov <- as.data.frame(cov)	
+
+	cov <- as.matrix(findOverlaps(regions.ranges, rmsk.ranges))
+        query <- regions.ranges[cov[,1]]
+        subject <- rmsk.ranges[cov[,2]]
+        overs <- data.frame(Qstart=start(query), Qend=end(query), Sstart=start(subject), Send=end(subject))
+	
+	getOverlapWidth <- function(overs)
+	{
+		r1 <- with(overs[1,],IRanges(start=Qstart,end=Qend))
+		r2 <- with(overs[1,],IRanges(start=Sstart,end=Send))
+		width(intersect(r1,r2))
+	}
+	
+	widths <- foreach(i=1:nrow(overs),.combine="c",.verbose=TRUE) %dopar%
+	{
+		print(i)
+
+		getOverlapWidth(overs[i,])
+	}
+
+	cov2 <- data.frame(cov,widths)
+
+	# now we just need to sum the widths for each distinct query index and divide by the width of that sequence to get the coverage percent
+	cov2.tot <- ddply(cov2,.(queryHits), summarise, mySum=sum(widths),.drop=FALSE)
+	cov2.tot$tot <- width(regions.ranges[cov2.tot$queryHits])
+	cov2.tot$per <- cov2.tot$mySum/cov2.tot$tot
+
+	# add back in the missing ones (they have coverage = 0% because no overlaps found)
+	out <- data.frame(index=seq(1,length(regions.ranges)),per=0)
+
+	out[cov2.tot$queryHits,]$per <- cov2.tot$per
+
+	out$per
 }
 
 getDistTSS <- function(regions.ranges,ann)
@@ -343,6 +389,33 @@ getDistTSS <- function(regions.ranges,ann)
 	dtss[,3]
 }
 
+#calculates from the center of the DMS rather than the nearest outer bound
+getDistTSSCenter <- function(regions.ranges,ann)
+{
+	# create ranges object with just the TSS
+	# need to use txEnd for genes on the "-" strand
+	ann.starts <- with(ann,data.frame(chrom,txStart.1based,txEnd,strand))
+
+	ann.starts$tss <- NA
+	ann.starts[ann.starts$strand=="+",]$tss <- ann.starts[ann.starts$strand=="+",]$txStart.1based
+	ann.starts[ann.starts$strand=="-",]$tss <- ann.starts[ann.starts$strand=="-",]$txEnd
+
+	ann.ranges <- with(ann.starts, GRanges(seqnames=chrom,ranges=IRanges(start=tss,end=tss)))
+
+	#overlap <- countOverlaps(regions.ranges,ann.ranges)
+
+	# if the overlaps number is zero, we need to find the nearest region
+
+	#nearest(regions.ranges,ann.ranges)
+
+	centers <- round(start(regions.ranges)+((end(regions.ranges) - start(regions.ranges))/2),digits=0)
+
+	centers.ranges <- GRanges(seqnames=seqnames(regions.ranges),ranges=IRanges(start=centers,end=centers))
+
+	dtss <- as.data.frame(distanceToNearest(centers.ranges,ann.ranges))
+	dtss[,3]
+}
+
 getDistTSE <- function(regions.ranges,ann)
 {
 	# create ranges object with just the TSS
@@ -363,6 +436,38 @@ getDistTSE <- function(regions.ranges,ann)
 
 	dtse <- as.data.frame(distanceToNearest(regions.ranges,ann.ranges))
 	dtse[,3]
+}
+
+getDistTSECenter <- function(regions.ranges,ann)
+{
+	# create ranges object with just the TSS
+	# need to use txEnd for genes on the "-" strand
+	ann.starts <- with(ann,data.frame(chrom,txStart.1based,txEnd,strand))
+
+	ann.starts$tse <- NA
+	ann.starts[ann.starts$strand=="+",]$tse <- ann.starts[ann.starts$strand=="+",]$txEnd
+	ann.starts[ann.starts$strand=="-",]$tse <- ann.starts[ann.starts$strand=="-",]$txStart.1based
+
+	ann.ranges <- with(ann.starts, GRanges(seqnames=chrom,ranges=IRanges(start=tse,end=tse)))
+
+	#overlap <- countOverlaps(regions.ranges,ann.ranges)
+
+	# if the overlaps number is zero, we need to find the nearest region
+
+	#nearest(regions.ranges,ann.ranges)
+
+	centers <- round(start(regions.ranges)+((end(regions.ranges) - start(regions.ranges))/2),digits=0)
+
+	centers.ranges <- GRanges(seqnames=seqnames(regions.ranges),ranges=IRanges(start=centers,end=centers))
+
+
+	dtse <- as.data.frame(distanceToNearest(centers.ranges,ann.ranges))
+	dtse[,3]
+}
+
+getFreqCpG <- function(seq)
+{
+	dinucleotideFrequency(seq,as.prob=TRUE)[,7]
 }
 
 

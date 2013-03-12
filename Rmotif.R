@@ -17,6 +17,9 @@ library(Matching)
 library(rms)
 library(doMC)
 
+###############################################
+## Local Dependencies
+###############################################
 source("GenomeInfo.R")
 
 ###############################################
@@ -163,11 +166,37 @@ drawBackgroundSetFromRegions <- function(seq,regions,nSimSeqs=10000,windowSize=5
 	sim.seq
 }
 
-drawBackgroundSetResampled <- function()
+# -----------------------------------------------------------------------------
+# Use propensity score matching to create a background set
+# Input: formula to match by
+# Output: DNAStringSet of propensity matched background sequences
+drawBackgroundSetPropensity <- function(target.seq, target.meta, pool.seq, pool.meta, formula)
 {
-	#TODO - draw a background set using importance based resampling to match by both length and GC content
-}
+	# setting binary value for group assignment
+	target.meta$treat <- 1
+	pool.meta$treat <- 0
+	all.meta <- rbind(target.meta, pool.meta)
 
+	# randomize sort order - order can bias when Match(..., replace=FALSE)
+	index.random <- sample(seq(1:nrow(all.meta)),nrow(all.meta), replace=FALSE)
+	all.meta.shuffle <- all.meta[index.random,]
+
+	# run logistic model
+	lrm.out <- lrm(formula, data=all.meta.shuffle)
+
+	# obtain values
+	lrm.out.fitted <- predict.lrm(lrm.out,type="fitted")
+
+	# match
+	rr <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.fitted, M=1, version="fast", replace=FALSE)
+	#summary(rr)
+
+	# make new sequence set
+	matched.meta <- all.meta.shuffle[rr$index.control,]
+	m <- match(as.character(matched.meta$name),names(pool.seq))
+	seq.resamp <- pool.seq[m]
+}
+# -----------------------------------------------------------------------------
 
 ###############################################
 ## Background Sequence Generators by Shuffles
@@ -553,7 +582,7 @@ calcEnrichmentBinom <- function(seq1.counts,seq1.nSeqs,seq2.counts,seq2.nSeqs)
 
 		pValue <- binom.test(x=myX, n=myN, p=myP, alternative="greater")$p.value
 
-		data.frame(motif=rownames(counts1.bin)[i],pvalue=pValue)
+		data.frame(motif=rownames(counts1.bin)[i],pvalue=pValue,percent_seqs=((myX/myN)*100))
 	}
 
 	pvalues
