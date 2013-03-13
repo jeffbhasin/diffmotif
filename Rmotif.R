@@ -496,7 +496,7 @@ plotCovarHistograms <- function(seq.meta,cols)
 # Plot overlapping histograms for any number of variables from 2 sets
 # Input: 2 data frames with row for each sequence, vector of columns to plot
 # Output: ggplot2 object
-plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols)
+plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols,plot.ncols=3, main="")
 {
 	# do we need arguments to take filtering and breaks options?
 	name1 <- "Target"
@@ -530,9 +530,12 @@ plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols)
 	p <- list()
 	for(i in 1:length(cols))
 	{
-  		p[[i]] <- ggplot.hist.overlap(hists1[[i]], hists2[[i]]) + labs(title=names(seq.meta)[cols[i]]) + theme(legend.position = "none")
+  		p[[i]] <- ggplot.hist.overlap(hists1[[i]], hists2[[i]]) + labs(title=names(seq1.meta)[cols[i]]) + theme(legend.position = "none")
 	}
+	p <- c(p,list(ncol=plot.ncols, main=main))
+
 	do.call(grid.arrange,p)
+	#grid.arrange(g,ncol=4)
 }
 
 # -----------------------------------------------------------------------------
@@ -544,6 +547,40 @@ plotCovarQQ <- function(seq.meta,cols)
 {
 
 }
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Plot horizontal graph of covariate distance from different propensity models
+# Input: list of data frames with corresponding column orders, vector of columns containing variables of interest
+# Output: ggplot2 object
+plotCovarDistance <- function(orig.meta,list.meta,cols)
+{
+	stddist <- function(d1, d2)
+	{
+		(mean(d1)-mean(d2))/sd(c(d1,d2))
+	}
+
+	# calculate distances for each variable
+	dists <- foreach(i=1:length(list.meta),.combine="rbind") %do%
+	{
+		vec <- foreach(u=1:length(cols),.combine="c") %do%
+		{		
+			stddist(orig.meta[,cols[u]],list.meta[[i]][,cols[u]])
+		}
+	}
+	colnames(dists) <- names(orig.meta)[cols]
+	rownames(dists) <- names(list.meta)
+
+	plot.data <- melt(dists)
+	names(plot.data) <- c("matching","variable","stddist")
+
+	mylevs <- levels(reorder(x=plot.data[plot.data$matching=="pool",]$variable,X=plot.data[plot.data$matching=="pool",]$stddist, order=FALSE))
+
+	plot.data$variable <- factor(plot.data$variable,levels=mylevs)
+
+	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + scale_colour_brewer(palette="Set1") + coord_flip() + labs(main="Covariate Balance")
+}
+
 # -----------------------------------------------------------------------------
 
 
@@ -644,7 +681,7 @@ calcEnrichmentBinom <- function(seq1.counts,seq1.nSeqs,seq2.counts,seq2.nSeqs)
 	pvalues
 }
 
-calcMotifCounts <- function(fimo.out, q.cutoff)
+calcMotifCountsSlow <- function(fimo.out, q.cutoff)
 {
 	#input: dataframe of fimo's text output, q value cutoff
 	#output: matrix of frequencies with a row for every motif and column for every sequence
@@ -675,3 +712,15 @@ calcMotifCounts <- function(fimo.out, q.cutoff)
 	mat
 }
 
+calcMotifCounts <- function(fimo.out, q.cutoff)
+{
+	#input: dataframe of fimo's text output, q value cutoff
+	#output: matrix of frequencies with a row for every motif and column for every sequence
+
+	fimo.out.filtered <- fimo.out[fimo.out$q.value<q.cutoff,]
+
+	fimo.out.filtered$X.pattern.name <- as.character(fimo.out.filtered$X.pattern.name)
+	fimo.out.filtered$sequence.name <- as.character(fimo.out.filtered$sequence.name)
+
+	tm <- table(fimo.out.filtered$X.pattern.name,fimo.out.filtered$sequence.name)
+}

@@ -4,66 +4,93 @@
 # Created: 2013-02-27
 # #############################################################################
 
+# This version adds additional models beyond just size and GC content
+
 # =============================================================================
 # Packages and Globals
 
-nCores <- 15
-
-library(ggplot2)
-library(gridExtra)
-library(Matching)
-library(rms)
-library(doMC)
-registerDoMC(nCores)
-
 source("Rmotif.R")
+
+nCores <- 15
+registerDoMC(nCores)
 
 # =============================================================================
 
 # =============================================================================
 # Local Functions
 
-# -----------------------------------------------------------------------------
-# Calculate GC content of a DNAString
-# Input: DNAStringSet object
-# Output: Vector of GC contents
-getGC <- function(seq)
+mySeqMeta <- function(myseq)
 {
-	g <- alphabetFrequency(seq)[,3]
-	c <- alphabetFrequency(seq)[,2]
-	a <- alphabetFrequency(seq)[,1]
-	t <- alphabetFrequency(seq)[,4]
+	# name, size and gc - easy
+	name <- names(myseq)
+	size <- width(myseq)
+	gc <- getGC(myseq)
 
-	gc <- (g+c) / (a+t+g+c)
-	gc
+	# add chr/start/end fields parsed from sequence name
+	name.split <- data.frame(do.call('rbind', strsplit(as.character(name),'-',fixed=TRUE)))
+	names(name.split) <- c("chr","start","end")
+	chr <- name.split$chr
+	start <- as.numeric(as.character(name.split$start))
+	end <- as.numeric(as.character(name.split$end))
+
+	# Add extra variables from annotation
+
+	seq.ranges <- GRanges(seqnames=chr,ranges=IRanges(start=start,end=end))
+
+	repeatPer <- getRepeatPercentFast(seq.ranges,rmsk)
+	sizeLog <- log10(size)
+	distTSS <- getDistTSS(seq.ranges,ann)
+	distTSE <- getDistTSE(seq.ranges,ann)
+	distTSSCenter <- getDistTSSCenter(seq.ranges,ann)
+	distTSECenter <- getDistTSECenter(seq.ranges,ann)
+	distTSSCenterLogX1 <- log10(getDistTSSCenter(seq.ranges,ann)+1)
+	distTSECenterLogX1 <- log10(getDistTSECenter(seq.ranges,ann)+1)
+	freqCpG <- getFreqCpG(myseq)
+
+	# combine into our covariate dataframe
+	seq.meta <- data.frame(name, chr, start, end, size, sizeLog, gc, freqCpG, repeatPer, distTSS, distTSSCenter, distTSSCenterLogX1, distTSE, distTSECenter, distTSECenterLogX1)
 }
-# -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# Draws background from a source using propensity score matching
-# Input:
-# Output: 
-
-drawBackgroundSetPropensity <- function(target.meta, pool.meta)
+myMatching <- function(name, formula)
 {
-	# TODO - draw a background set using propensity score matching
-	# TODO - make function take a variable of which model/covars to use
+	seq.ref <- drawBackgroundSetPropensity(seq1,seq1.meta,seq2,seq2.meta,formula)
 
-	# estimate propensity model first
+	seq.ref.meta <- mySeqMeta(seq.ref)
 
-	# instead of "treatment" the variable is 1 if in target distribution and 0 if in background pool distribution
-	# the linear regression is then of this categorical assignment versus a model of the other covariates we want
+	# plot hists
+	png(filename=paste("output/hists.covars.",name,".auto.png",sep=""),width=1400,height=800,res=120)
+	print(plotCovarHistogramsOverlap(seq1.meta,seq.ref.meta,cols,plot.ncols=4))
+	dev.off()
 
-	# create "treatment" variable
-
-	# run logistic regression of treatment ~ covar model
-
-	# match based on propensity score
-
-	# test quality of matching
-
+	list(seq=seq.ref,meta=seq.ref.meta)
 }
-# -----------------------------------------------------------------------------
+
+myTesting <- function(name,ref)
+{
+	# run FIMO
+	sim.nSeqs <- length(ref$seq)
+
+	fasta.path <- paste("output/",name,".fasta",sep="")
+	unlink(fasta.path)
+	writeXStringSet(seq.ref, fasta.path, append=FALSE, format="fasta")
+
+	out.path <- paste("output/fimo_out_",name,sep="")
+	unlink(out.path)
+	runFIMO(name,fasta.path,motif.path)
+	fimo.out.sim <- readFIMO(paste(out.path,"/fimo.txt",sep=""))
+	fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
+
+	# binomial test
+	results <- calcEnrichmentBinom(fimo.out.counts,seq1.nSeqs,fimo.out.sim.counts,sim.nSeqs)
+	#results.sort <- results[order(results$pvalue, decreasing=FALSE),]
+	#head(results.sort)
+	#tail(results.sort)
+
+	results$neglogP <- -log10(results$pvalue)
+
+	csv.path <- paste("output/binom.covars.",name,".csv",sep="")
+	write.csv(results,file=csv.path,row.names=FALSE)
+}
 
 # =============================================================================
 
@@ -71,179 +98,128 @@ drawBackgroundSetPropensity <- function(target.meta, pool.meta)
 # Analysis Code
 
 # -----------------------------------------------------------------------------
-# Load seqs and run via function
+# Load seqs
 
-# load source set of sequences
+# load annotation for environment
+ann <- readUCSCAnnotation(genome="hg18",path="ignore/ucsc/")
+rmsk <- readRepeatMasker("hg18","ignore/ucsc/")
+
+# load target set of sequences
 seq1.path <- "../RunMEME/ColonSeqGR2012/CIMPHyperMe.fasta"
 seq1 <- readDNAStringSet(seq1.path)
 seq1.nSeqs <- length(seq1)
 
+# calculate covars of target
+seq1.meta <- mySeqMeta(seq1)
+
 # load background "pool" we want to draw from and make match the distribution of variable from the target
 seq2.path <- "ignore/ns.111.fasta"
 seq2.unfiltered <- readDNAStringSet(seq2.path)
-seq2.nSeqs <- length(seq2.unfiltered)
-
-# make dataframe of variables for each sequence - GC and size for now, could add distance from TSS, etc in the future
-seq1.meta <- data.frame(name=names(seq1),size=width(seq1),gc=getGC(seq1))
-seq2.meta.unfiltered <- data.frame(name=names(seq2.unfiltered),size=width(seq2.unfiltered),gc=getGC(seq2.unfiltered))
 
 # filter out all sequences longer than or shorter than the target from the background pool
-seq2.meta <- seq2.meta.unfiltered[(seq2.meta.unfiltered$size<=max(seq1.meta$size))&(seq2.meta.unfiltered$size>=min(seq1.meta$size)),]
+seq2.unfiltered.size <- width(seq2.unfiltered)
+seq2 <- seq2.unfiltered[(seq2.unfiltered.size<=max(seq1.meta$size))&(seq2.unfiltered.size>=min(seq1.meta$size))]
+seq2.nSeqs <- length(seq2)
 
-seq2 <- seq2.unfiltered[(seq2.meta.unfiltered$size<=max(seq1.meta$size))&(seq2.meta.unfiltered$size>=min(seq1.meta$size))]
+# calculate covars of reference pool
+seq2.meta <- mySeqMeta(seq2)
 
-# -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# Testing of Matching package options and linear models
-
-target.meta <- seq1.meta
-pool.meta <- seq2.meta
-
-# setting binary value for group assignment
-target.meta$treat <- 1
-pool.meta$treat <- 0
-all.meta <- rbind(target.meta, pool.meta)
-
-# randomize sort order - order can bias when Match(..., replace=FALSE)
-index.random <- sample(seq(1:nrow(all.meta)),nrow(all.meta), replace=FALSE)
-all.meta.shuffle <- all.meta[index.random,]
-
-# GC
-# run logistic model
-lrm.out.gc <- lrm(treat ~ gc, data=all.meta.shuffle)
-# obtain values
-lrm.out.gc.fitted <- predict.lrm(lrm.out.gc,type="fitted")
-# plot
-#png(filename="output/propscore.gc.lrm.png",width=1000,height=800,res=120)
-#qplot(x=gc,y=treat,data=all.meta.shuffle) + geom_line(aes(x, y), data.frame(x=all.meta.shuffle$gc,y=lrm.out.gc.fitted)) + ggplot.clean()
-#dev.off()
-# match
-rr.gc  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.gc.fitted, M=1, version="fast", replace=FALSE)
-# check match
-#summary(rr.size)
-#mb.gc  <- MatchBalance(treat ~ gc, data=all.meta.shuffle, match.out=rr.gc, nboots=10)
-# make new sequence set
-matched.meta.gc <- all.meta.shuffle[rr.gc$index.control,]
-m <- match(as.character(matched.meta.gc$name),names(seq2))
-seq.resamp.gc <- seq2[m]
-
-# plot histograms of new sequence set versus old
-png(filename="output/dists.filter.resamp.propen.gc.png",width=1000,height=800,res=120)
-plotSequenceHistograms(seq1,seq.resamp.gc)
-dev.off()
-
-png(filename="output/dists.filter.resamp.propen.gc.overlap.png",width=1400,height=800,res=120)
-plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.gc)
-dev.off()
-
-
-# run motif analysis using the resampled background
-
-
-# Size
-#glm.out <- glm(treat ~ size, family=binomial(link=logit), data=all.meta)
-lrm.out.size <- lrm(treat ~ size, data=all.meta.shuffle)
-#png(filename="output/propscore.size.lrm.png",width=1000,height=800,res=120)
-lrm.out.size.fitted <- predict.lrm(lrm.out.size,type="fitted")
-#qplot(x=size,y=treat,data=all.meta) + geom_line(aes(x, y), data.frame(x=all.meta$size,y=lrm.out.size.fitted)) + ggplot.clean()
-#dev.off()
-# match
-rr.size  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.size.fitted, M=1, version="fast", replace=FALSE)
-# check match
-#summary(rr.size)
-#mb.gc  <- MatchBalance(treat ~ gc, data=all.meta.shuffle, match.out=rr.gc, nboots=10)
-# make new sequence set
-matched.meta.size <- all.meta.shuffle[rr.size$index.control,]
-m <- match(as.character(matched.meta.size$name),names(seq2))
-seq.resamp.size <- seq2[m]
-
-# plot histograms of new sequence set versus old
-png(filename="output/dists.filter.resamp.propen.size.png",width=1000,height=800,res=120)
-plotSequenceHistograms(seq1,seq.resamp.size)
-dev.off()
-
-png(filename="output/dists.filter.resamp.propen.size.overlap.png",width=1400,height=800,res=120)
-plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.size)
-dev.off()
-
-#png(filename="output/dists.resamp.propen.qq.png",width=1400,height=800,res=120)
-#plotSequenceQQ4(seq1,seq2,seq.resamp.gc,seq.resamp.size,c("Original","GC","Size"))
-#dev.off()
-
-# Size + GC
-lrm.out.sizegc <- lrm(treat ~ size + gc, data=all.meta.shuffle)
-lrm.out.sizegc.fitted <- predict.lrm(lrm.out.sizegc,type="fitted")
-# can't plot without separating dimmensions
-#png(filename="output/propscore.size-gc.lrm.png",width=1000,height=800,res=120)
-#qplot(x=size+gc,y=treat,data=all.meta) + geom_point(aes(x, y), data.frame(x=all.meta$size+all.meta$gc,y=1-glm.out$fitted))
-#dev.off()
-# match
-rr.sizegc  <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.sizegc.fitted, M=1, version="fast", replace=FALSE)
-# check match
-#summary(rr.size)
-#mb.gc  <- MatchBalance(treat ~ gc, data=all.meta.shuffle, match.out=rr.gc, nboots=10)
-# make new sequence set
-matched.meta.sizegc <- all.meta.shuffle[rr.sizegc$index.control,]
-m <- match(as.character(matched.meta.sizegc$name),names(seq2))
-seq.resamp.sizegc <- seq2[m]
-
-# plot histograms of new sequence set versus old
-png(filename="output/dists.filter.resamp.propen.sizegc.png",width=1000,height=800,res=120)
-plotSequenceHistograms(seq1,seq.resamp.sizegc)
-dev.off()
-
-png(filename="output/dists.filter.resamp.propen.sizegc.overlap.png",width=1400,height=800,res=120)
-plotSequenceHistogramsResampled(seq1,seq2,seq.resamp.sizegc)
-dev.off()
-
-# Plots
-
-
-png(filename="output/dists.filter.resamp.propen.qqr2.png",width=1400,height=800,res=120)
-plotSequenceQQR5(seq1,seq2,seq.resamp.gc,seq.resamp.size,seq.resamp.sizegc,c("Original","GC","Size","Size+GC"))
-dev.off()
-
-save.image(file="ignore/propensity.Rd")
-
-
-
+# set which cols have covars in them
+cols <- 5:ncol(seq1.meta)
 
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# Run binomial test on the matches we made
+# FIMO on target seqs
 
 motif.path <- "../TRANSFAC/ConvertToMEME/TRAJAS.Human.named.meme"
 q.cutoff <- 0.05
 
 # read in FIMO run on target
 run.name <- "CIMPHyperMe"
-nSeqs <- length(seq)
 #runFIMO(run.name,seq.path,motif.path)
 fimo.out <- readFIMO(paste("output/fimo_out_",run.name,"/fimo.txt",sep=""))
+fimo.out.light <- with(fimo.out,data.frame(X.pattern.name,q.value,sequence.name))
 fimo.out.counts <- calcMotifCounts(fimo.out,q.cutoff)
 
-
-# must have resampled seq set at this point
-seq.target <- seq1
-seq.background <- seq.resamp.sizegc
-
-sim.nSeqs <- length(seq.background)
-
-unlink("output/simseq.fasta")
-writeXStringSet(seq.background, "output/simseq.fasta", append=FALSE, format="fasta")
-
-#unlink("output/fimo_out_sim")
-#runFIMO("sim","output/simseq.fasta",motif.path)
-fimo.out.sim <- readFIMO("output/fimo_out_sim/fimo.txt")
-fimo.out.sim.counts <- calcMotifCounts(fimo.out.sim,q.cutoff)
-results <- calcEnrichmentBinom(fimo.out.counts,nSeqs,fimo.out.sim.counts,sim.nSeqs)
-results.sort <- results[order(results$pvalue, decreasing=FALSE),]
-head(results.sort)
-tail(results.sort)
-write.csv(results.sort,file="output/diffmotif.bkg.propensity.sizegc.csv",row.names=FALSE)
+# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
+# entire pool
+
+# plot overlapping hists of initial covars
+png(filename="output/hists.covars.orig.png",width=1400,height=800,res=120)
+plotCovarHistogramsOverlap(seq1.meta,seq2.meta,cols,plot.ncols=4)
+dev.off()
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Single Run Example
+#name <- "size_gc"
+#formula <- as.formula("treat ~ size + gc")
+
+#ref.sizegc <- myMatching(name, formula)
+#ref.sizegc$results <- myTesting(ref.sizegc)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Run many formulas in a parallel loop
+
+# vector of formulas to use
+mine <- c("size", "gc", "size + gc", "size + gc + freqCpG", "size + freqCpG", "size + freqCpG + repeatPer")
+
+ref.names <- gsub(" ","", mine)
+ref.names <- gsub("+","_", ref.names,fixed=TRUE)
+mine <- paste("treat ~ ",mine,sep="")
+
+ref <- foreach(i=1:length(mine)) %dopar%
+{
+	print(paste("Doing ",mine[i],sep=""))
+	formula <- as.formula(mine[i])	
+	name <- gsub(" ","", as.character(formula)[3])
+	name <- gsub("+","_", name,fixed=TRUE)
+
+	myref <- myMatching(name, formula)
+	#myref$results <- myTesting(myref.sizegcrep)
+
+	myref
+}
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Output: Multipage PDF of plots
+
+pdf(file="output/Rmotif.plots.pdf", width=10.5, height=8, paper="USr")
+# covar plot
+mymeta <- list()
+mymeta$pool <- seq2.meta
+for(i in 1:length(mine))
+{
+	mymeta[[ref.names[i]]] <- ref[[i]]$meta
+}
+plotCovarDistance(seq1.meta, mymeta, cols)
+
+# overlap histograms
+
+for(i in 1:length(mine))
+{
+	print(plotCovarHistogramsOverlap(seq1.meta, ref[[i]]$meta, cols, plot.ncols=4, main=mine[i]))
+}
+dev.off()
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Output: Single CSV of test results
+
+#mycsv <- data.frame()
+#for(i in 1:length(mine))
+#{
+#	cbind(mycsv,ref[[i]]$results)
+#}
+#write.csv(file="",row.names=FALSE)
+# -----------------------------------------------------------------------------
+
 
 # =============================================================================
