@@ -527,6 +527,11 @@ plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols,plot.ncols=3, ma
 		ggplot(plot.data, aes(x=bin,y=freq,fill=seq)) + geom_bar(data=subset(plot.data,seq == name1), stat="identity",alpha=0.5) + geom_bar(data=subset(plot.data,seq == name2), stat="identity",alpha=0.5) + scale_fill_manual("", values = c("#007FFF","#FF007F")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
 	}
 
+	p1 <- ggplot.hist.overlap(hists1[[1]], hists2[[1]]) + theme(legend.position="bottom")
+	tmp <- ggplot_gtable(ggplot_build(p1))
+	leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+	legend <- tmp$grobs[[leg]]
+
 	p <- list()
 	for(i in 1:length(cols))
 	{
@@ -534,8 +539,8 @@ plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols,plot.ncols=3, ma
 	}
 	p <- c(p,list(ncol=plot.ncols, main=main))
 
-	do.call(grid.arrange,p)
-	#grid.arrange(g,ncol=4)
+	g <- do.call(arrangeGrob,p)
+	grid.arrange(g, legend, heights=unit(c(7.5,0.5),"in"),nrow=2,ncol=1)
 }
 
 # -----------------------------------------------------------------------------
@@ -543,9 +548,37 @@ plotCovarHistogramsOverlap <- function(seq1.meta,seq2.meta,cols,plot.ncols=3, ma
 # Plot histograms in a grid for arbitrary number of variables
 # Input: data frame with row for each sequence, vector of columns to plot
 # Output: ggplot2 object
-plotCovarQQ <- function(seq.meta,cols)
+plotCovarQQ <- function(orig.meta,list.meta,cols,plot.ncols=3)
 {
+	ggplot.qq <- function(d)
+	{
+		ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences), size=2, stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background") + geom_abline(slope = 1, intercept=0) + labs(title=names(orig.meta)[cols[i]]) + scale_colour_brewer(palette="Set1")
+	}
 
+	plot.data <- foreach(i=1:length(cols)) %do%
+	{
+		foreach(u=1:length(list.meta),.combine="rbind") %do%
+		{
+			data.frame(as.data.frame(qqplot(orig.meta[,cols[i]], list.meta[[u]][,cols[i]], plot.it=FALSE)),Sequences=names(list.meta)[u])
+		}
+	}
+
+	p1 <- ggplot.qq(plot.data[[i]]) + theme(legend.position="bottom")
+	tmp <- ggplot_gtable(ggplot_build(p1))
+	leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+	legend <- tmp$grobs[[leg]]
+
+	p <- list()
+	for(i in 1:length(cols))
+	{
+		d <- plot.data[[i]]
+  		p[[i]] <- ggplot.qq(d) + theme(legend.position="none")
+	}
+	p <- c(p,list(ncol=plot.ncols))
+
+	g <- do.call(arrangeGrob,p)
+	grid.arrange(g, legend, heights=unit(c(7.5,0.5),"in"), main="QQ Plots",nrow=2,ncol=1)
+	
 }
 # -----------------------------------------------------------------------------
 

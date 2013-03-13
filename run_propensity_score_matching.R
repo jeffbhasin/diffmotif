@@ -199,7 +199,7 @@ for(i in 1:length(mine))
 	mymeta[[ref.names[i]]] <- ref[[i]]$meta
 }
 plotCovarDistance(seq1.meta, mymeta, cols)
-
+plotCovarQQ(seq1.meta, mymeta, cols, plot.ncols=4)
 # overlap histograms
 
 for(i in 1:length(mine))
