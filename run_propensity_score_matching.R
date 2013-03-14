@@ -48,7 +48,8 @@ mySeqMeta <- function(myseq)
 	freqCpG <- getFreqCpG(myseq)
 
 	# combine into our covariate dataframe
-	seq.meta <- data.frame(name, chr, start, end, size, sizeLog, gc, freqCpG, repeatPer, distTSS, distTSSCenter, distTSSCenterLogX1, distTSE, distTSECenter, distTSECenterLogX1)
+	#seq.meta <- data.frame(name, chr, start, end, size, sizeLog, gc, freqCpG, repeatPer, distTSS, distTSSCenter, distTSSCenterLogX1, distTSE, distTSECenter, distTSECenterLogX1)
+	seq.meta <- data.frame(name, chr, start, end, size, sizeLog, gc, freqCpG, repeatPer, distTSSCenterLogX1, distTSECenterLogX1)
 }
 
 myMatching <- function(name, formula)
@@ -58,9 +59,9 @@ myMatching <- function(name, formula)
 	seq.ref.meta <- mySeqMeta(seq.ref)
 
 	# plot hists
-	png(filename=paste("output/hists.covars.",name,".auto.png",sep=""),width=1400,height=800,res=120)
-	print(plotCovarHistogramsOverlap(seq1.meta,seq.ref.meta,cols,plot.ncols=4))
-	dev.off()
+	#png(filename=paste("output/hists.covars.",name,".auto.png",sep=""),width=1400,height=800,res=120)
+	#print(plotCovarHistogramsOverlap(seq1.meta,seq.ref.meta,cols,plot.ncols=4))
+	#dev.off()
 
 	list(seq=seq.ref,meta=seq.ref.meta)
 }
@@ -86,10 +87,15 @@ myTesting <- function(name,ref)
 	#head(results.sort)
 	#tail(results.sort)
 
+
+	# adjusted p-value	
+
 	results$neglogP <- -log10(results$pvalue)
 
 	csv.path <- paste("output/binom.covars.",name,".csv",sep="")
 	write.csv(results,file=csv.path,row.names=FALSE)
+
+	results
 }
 
 # =============================================================================
@@ -148,9 +154,9 @@ fimo.out.counts <- calcMotifCounts(fimo.out,q.cutoff)
 # entire pool
 
 # plot overlapping hists of initial covars
-png(filename="output/hists.covars.orig.png",width=1400,height=800,res=120)
-plotCovarHistogramsOverlap(seq1.meta,seq2.meta,cols,plot.ncols=4)
-dev.off()
+#png(filename="output/hists.covars.orig.png",width=1400,height=800,res=120)
+#plotCovarHistogramsOverlap(seq1.meta,seq2.meta,cols,plot.ncols=4)
+#dev.off()
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
@@ -165,8 +171,10 @@ dev.off()
 # -----------------------------------------------------------------------------
 # Run many formulas in a parallel loop
 
+# size, sizeLog, gc, freqCpG, repeatPer, distTSSCenterLogX1, distTSECenterLogX1
+
 # vector of formulas to use
-mine <- c("size", "gc", "size + gc", "size + gc + freqCpG", "size + freqCpG", "size + freqCpG + repeatPer")
+mine <- c("size", "sizeLog", "sizeLog + gc","freqCpG", "freqCpG + repeatPer", "freqCpG + repeatPer + distTSSCenterLogX1", "freqCpG + repeatPer + distTSECenterLogX1", "sizeLog + gc + freqCpG + repeatPer + distTSSCenterLogX1", "sizeLog + gc + freqCpG + repeatPer + distTSECenterLogX1")
 
 ref.names <- gsub(" ","", mine)
 ref.names <- gsub("+","_", ref.names,fixed=TRUE)
@@ -183,6 +191,12 @@ ref <- foreach(i=1:length(mine)) %dopar%
 	#myref$results <- myTesting(myref.sizegcrep)
 
 	myref
+}
+
+ref.results <- foreach(i=1:length(mine)) %dopar%
+{
+	print(paste("Doing ",mine[i],sep=""))
+	#myTesting(ref.names[i], ref[[i]])
 }
 
 # -----------------------------------------------------------------------------
@@ -202,6 +216,7 @@ plotCovarDistance(seq1.meta, mymeta, cols)
 plotCovarQQ(seq1.meta, mymeta, cols, plot.ncols=4)
 # overlap histograms
 
+print(plotCovarHistogramsOverlap(seq1.meta,seq2.meta, cols, plot.ncols=4, main="pool"))
 for(i in 1:length(mine))
 {
 	print(plotCovarHistogramsOverlap(seq1.meta, ref[[i]]$meta, cols, plot.ncols=4, main=mine[i]))
@@ -219,6 +234,13 @@ dev.off()
 #	cbind(mycsv,ref[[i]]$results)
 #}
 #write.csv(file="",row.names=FALSE)
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Output: Save R Workspace
+
+save.image(file="output/run_propensity_score_matching.R")
+
 # -----------------------------------------------------------------------------
 
 

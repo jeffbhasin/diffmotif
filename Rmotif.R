@@ -25,6 +25,9 @@ source("GenomeInfo.R")
 ###############################################
 ## Utility
 ###############################################
+
+myColors <- c("#000000", "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#FFFF33", "#A65628", "#F781BF", "#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
 ggplot.clean <- function()
 {
 	theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"))
@@ -552,7 +555,7 @@ plotCovarQQ <- function(orig.meta,list.meta,cols,plot.ncols=3)
 {
 	ggplot.qq <- function(d)
 	{
-		ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences), size=2, stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background") + geom_abline(slope = 1, intercept=0) + labs(title=names(orig.meta)[cols[i]]) + scale_colour_brewer(palette="Set1")
+		ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences), size=2, stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background") + geom_abline(slope = 1, intercept=0) + labs(title=names(orig.meta)[cols[i]]) + scale_colour_manual(values = myColors)
 	}
 
 	plot.data <- foreach(i=1:length(cols)) %do%
@@ -563,7 +566,7 @@ plotCovarQQ <- function(orig.meta,list.meta,cols,plot.ncols=3)
 		}
 	}
 
-	p1 <- ggplot.qq(plot.data[[i]]) + theme(legend.position="bottom")
+	p1 <- ggplot.qq(plot.data[[1]]) + theme(legend.position="right")
 	tmp <- ggplot_gtable(ggplot_build(p1))
 	leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
 	legend <- tmp$grobs[[leg]]
@@ -577,8 +580,8 @@ plotCovarQQ <- function(orig.meta,list.meta,cols,plot.ncols=3)
 	p <- c(p,list(ncol=plot.ncols))
 
 	g <- do.call(arrangeGrob,p)
-	grid.arrange(g, legend, heights=unit(c(7.5,0.5),"in"), main="QQ Plots",nrow=2,ncol=1)
-	
+	#grid.arrange(g, legend, widths=unit(c(7.5,0.5),"in"), main="QQ Plots",nrow=1,ncol=2)
+	grid.arrange(g, main="QQ Plots")
 }
 # -----------------------------------------------------------------------------
 
@@ -610,10 +613,10 @@ plotCovarDistance <- function(orig.meta,list.meta,cols)
 	mylevs <- levels(reorder(x=plot.data[plot.data$matching=="pool",]$variable,X=plot.data[plot.data$matching=="pool",]$stddist, order=FALSE))
 
 	plot.data$variable <- factor(plot.data$variable,levels=mylevs)
+	plot.data$matching <- factor(plot.data$matching,levels=names(list.meta))
 
-	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + scale_colour_brewer(palette="Set1") + coord_flip() + labs(main="Covariate Balance")
+	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="mean(group 1)+mean(group 2))/stdev(group 1 union group 2)") + scale_colour_manual(values = myColors)
 }
-
 # -----------------------------------------------------------------------------
 
 
