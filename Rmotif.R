@@ -26,7 +26,23 @@ source("GenomeInfo.R")
 ## Utility
 ###############################################
 
-myColors <- c("#000000", "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#FFFF33", "#A65628", "#F781BF", "#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+#myColors <- c("#000000", "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#FFFF33", "#A65628", "#F781BF", "#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# -----------------------------------------------------------------------------
+# Make set of distinct color labels for plots
+# Input: DNAStringSet object
+# Output: Vector of hex color codes
+genColors <- function(n, rand=FALSE)
+{
+	# Brewer's qualitative palette "Set1" only has 9 values
+	# Extrapolate from these to create palettes of any size
+
+	pal <- colorRampPalette(brewer.pal(9,"Set1"))(n)
+	if(rand==TRUE){pal <- sample(pal)}
+
+	pal
+}
+# -----------------------------------------------------------------------------
 
 ggplot.clean <- function()
 {
@@ -555,7 +571,7 @@ plotCovarQQ <- function(orig.meta,list.meta,cols,plot.ncols=3)
 {
 	ggplot.qq <- function(d)
 	{
-		ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences), size=2, stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background") + geom_abline(slope = 1, intercept=0) + labs(title=names(orig.meta)[cols[i]]) + scale_colour_manual(values = myColors)
+		ggplot(d) + geom_point(aes(x=x, y=y,color=Sequences), size=2, stat = "identity", position = "identity", ) + ggplot.clean() + labs(x="Target", y="Background") + geom_abline(slope = 1, intercept=0) + labs(title=names(orig.meta)[cols[i]]) + scale_colour_manual(values = genColors(length(list.meta)))
 	}
 
 	plot.data <- foreach(i=1:length(cols)) %do%
@@ -615,7 +631,7 @@ plotCovarDistance <- function(orig.meta,list.meta,cols)
 	plot.data$variable <- factor(plot.data$variable,levels=mylevs)
 	plot.data$matching <- factor(plot.data$matching,levels=names(list.meta))
 
-	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="mean(group 1)+mean(group 2))/stdev(group 1 union group 2)") + scale_colour_manual(values = myColors)
+	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="mean(group 1)+mean(group 2))/stdev(group 1 union group 2)") + scale_colour_manual(values = genColors(length(list.meta)))
 }
 # -----------------------------------------------------------------------------
 

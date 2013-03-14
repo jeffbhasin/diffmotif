@@ -73,7 +73,7 @@ myTesting <- function(name,ref)
 
 	fasta.path <- paste("output/",name,".fasta",sep="")
 	unlink(fasta.path)
-	writeXStringSet(seq.ref, fasta.path, append=FALSE, format="fasta")
+	writeXStringSet(ref$seq, fasta.path, append=FALSE, format="fasta")
 
 	out.path <- paste("output/fimo_out_",name,sep="")
 	unlink(out.path)
@@ -90,7 +90,8 @@ myTesting <- function(name,ref)
 
 	# adjusted p-value	
 
-	results$neglogP <- -log10(results$pvalue)
+	results$p.adj <- p.adjust(results$pvalue, method="fdr")
+	results$neglogP <- -log10(results$p.adj)
 
 	csv.path <- paste("output/binom.covars.",name,".csv",sep="")
 	write.csv(results,file=csv.path,row.names=FALSE)
@@ -176,13 +177,15 @@ fimo.out.counts <- calcMotifCounts(fimo.out,q.cutoff)
 # vector of formulas to use
 mine <- c("size", "sizeLog", "sizeLog + gc","freqCpG", "freqCpG + repeatPer", "freqCpG + repeatPer + distTSSCenterLogX1", "freqCpG + repeatPer + distTSECenterLogX1", "sizeLog + gc + freqCpG + repeatPer + distTSSCenterLogX1", "sizeLog + gc + freqCpG + repeatPer + distTSECenterLogX1")
 
+#mine <- c("size", "gc")
+
 ref.names <- gsub(" ","", mine)
 ref.names <- gsub("+","_", ref.names,fixed=TRUE)
 mine <- paste("treat ~ ",mine,sep="")
 
 ref <- foreach(i=1:length(mine)) %dopar%
 {
-	print(paste("Doing ",mine[i],sep=""))
+	print(paste("Matching ",mine[i],sep=""))
 	formula <- as.formula(mine[i])	
 	name <- gsub(" ","", as.character(formula)[3])
 	name <- gsub("+","_", name,fixed=TRUE)
@@ -195,8 +198,8 @@ ref <- foreach(i=1:length(mine)) %dopar%
 
 ref.results <- foreach(i=1:length(mine)) %dopar%
 {
-	print(paste("Doing ",mine[i],sep=""))
-	#myTesting(ref.names[i], ref[[i]])
+	print(paste("Testing ",mine[i],sep=""))
+	myTesting(ref.names[i], ref[[i]])
 }
 
 # -----------------------------------------------------------------------------
@@ -204,7 +207,7 @@ ref.results <- foreach(i=1:length(mine)) %dopar%
 # -----------------------------------------------------------------------------
 # Output: Multipage PDF of plots
 
-pdf(file="output/Rmotif.plots.pdf", width=10.5, height=8, paper="USr")
+pdf(file="output/Rmotif.plots2.pdf", width=10.5, height=8, paper="USr")
 # covar plot
 mymeta <- list()
 mymeta$pool <- seq2.meta
@@ -221,6 +224,34 @@ for(i in 1:length(mine))
 {
 	print(plotCovarHistogramsOverlap(seq1.meta, ref[[i]]$meta, cols, plot.ncols=4, main=mine[i]))
 }
+dev.off()
+
+# build adjusted pvalue matrix
+
+
+#HEATMAP
+library(gplots)
+
+val <- as.numeric(ref.results[[1]]$p.adj)
+val2 <- -log10(val)
+val2[val2=="Inf"] <- max(val2[val2!="Inf"])
+
+mat <- matrix(val2)
+for(i in 2:length(mine))
+{
+	val <- as.numeric(ref.results[[i]]$p.adj)
+	val2 <- -log10(val)
+	val2[val2=="Inf"] <- max(val2[val2!="Inf"])
+
+	mat <- cbind(mat,val2)
+}
+rownames(mat) <- ref.results[[1]]$motif
+colnames(mat) <- ref.names
+
+pdf(file="output/heattest.pdf", width=10.5, height=8, paper="USr")
+#png(filename="output/tmp.png",width=1400,height=800,res=120)
+hm <- heatmap.2(mat, key=T, keysize=1.5, trace="none",cexCol=1.2, labRow=NA, col=colorRampPalette(brewer.pal(9,"Blues")), main="Heatmap of -log10(adj p)",labCol=seq(1,ncol(mat)))
+data.frame(column=seq(1,ncol(mat)),model=colnames(mat))
 dev.off()
 
 # -----------------------------------------------------------------------------
@@ -243,5 +274,181 @@ save.image(file="output/run_propensity_score_matching.R")
 
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Multiple Draws of Same Formula (sensitivity testing)
+# vector of formulas to use
+mine <- rep("sizeLog + gc + freqCpG + repeatPer + distTSSCenterLogX1", 30)
+
+#mine <- c("size", "gc")
+
+ref.names <- gsub(" ","", mine)
+ref.names <- gsub("+","_", ref.names,fixed=TRUE)
+#ref.names <- paste(ref.names,seq(1,length(ref.names)),sep="-perm")
+ref.names <- paste("allTSS",seq(1,length(ref.names)),sep="-perm")
+mine <- paste("treat ~ ",mine,sep="")
+
+ref <- foreach(i=1:length(mine)) %dopar%
+{
+	print(paste("Matching ",mine[i],sep=""))
+	formula <- as.formula(mine[i])	
+	name <- gsub(" ","", as.character(formula)[3])
+	name <- gsub("+","_", name,fixed=TRUE)
+	name <- ref.names[i]
+	myref <- myMatching(name, formula)
+	#myref$results <- myTesting(myref.sizegcrep)
+
+	myref
+}
+
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Output: Multipage PDF of plots
+
+pdf(file="output/Rmotif.plots2.formulaperm2.pdf", width=10.5, height=8, paper="USr")
+# covar plot
+mymeta <- list()
+mymeta$pool <- seq2.meta
+for(i in 1:length(mine))
+{
+	mymeta[[ref.names[i]]] <- ref[[i]]$meta
+}
+plotCovarDistance(seq1.meta, mymeta, cols)
+plotCovarQQ(seq1.meta, mymeta, cols, plot.ncols=4)
+# overlap histograms
+
+print(plotCovarHistogramsOverlap(seq1.meta,seq2.meta, cols, plot.ncols=4, main="pool"))
+for(i in 1:length(mine))
+{
+	print(plotCovarHistogramsOverlap(seq1.meta, ref[[i]]$meta, cols, plot.ncols=4, main=mine[i]))
+}
+dev.off()
+
+# FIMO RUNS: build adjusted pvalue matrix
+ref.results <- foreach(i=1:length(mine)) %dopar%
+{
+	print(paste("Testing ",mine[i],sep=""))
+	myTesting(ref.names[i], ref[[i]])
+}
+
+
+#HEATMAP
+library(gplots)
+
+val <- as.numeric(ref.results[[1]]$p.adj)
+val2 <- -log10(val)
+val2[val2=="Inf"] <- max(val2[val2!="Inf"])
+
+mat <- matrix(val2)
+for(i in 2:length(mine))
+{
+	val <- as.numeric(ref.results[[i]]$p.adj)
+	val2 <- -log10(val)
+	val2[val2=="Inf"] <- max(val2[val2!="Inf"])
+
+	mat <- cbind(mat,val2)
+}
+rownames(mat) <- ref.results[[1]]$motif
+colnames(mat) <- ref.names
+
+pdf(file="output/heattest.formulaperm2.pdf", width=10.5, height=8, paper="USr")
+#png(filename="output/tmp.png",width=1400,height=800,res=120)
+hm <- heatmap.2(mat, key=T, keysize=1.5, trace="none",cexCol=1.2, labRow=NA, col=colorRampPalette(brewer.pal(9,"Blues")), main="Heatmap of -log10(adj p)",labCol=seq(1,ncol(mat)))
+data.frame(column=seq(1,ncol(mat)),model=colnames(mat))
+dev.off()
+
+
+
+# -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Multiple random subsamples with nDraw==nTarget from the reference pool
+# vector of formulas to use
+nDraws <- 30
+
+mine <- rep("subsamples", nDraws)
+
+#mine <- c("size", "gc")
+
+ref.names <- gsub(" ","", mine)
+ref.names <- gsub("+","_", ref.names,fixed=TRUE)
+#ref.names <- paste(ref.names,seq(1,length(ref.names)),sep="-perm")
+ref.names <- paste("poolsubsamples",seq(1,length(ref.names)),sep="-perm")
+#mine <- paste("treat ~ ",mine,sep="")
+
+ref <- foreach(i=1:length(ref.names)) %dopar%
+{
+	print(paste("Sampling ",ref.names[i],sep=""))
+	name <- ref.names[i]
+
+	#myref <- myMatching(name, formula)
+	#myref$results <- myTesting(myref.sizegcrep)
+
+	mydraws <- sample.int(length(seq2), size=length(seq1),replace=FALSE)
+	myseq <- seq2[mydraws]
+	mymeta <- mySeqMeta(myseq)
+
+	myref <- list(seq=myseq,meta=mymeta)
+
+	myref
+}
+
+
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Output: Multipage PDF of plots
+
+pdf(file="output/Rmotif.plots.poolsubsamples.pdf", width=10.5, height=8, paper="USr")
+# covar plot
+mymeta <- list()
+mymeta$pool <- seq2.meta
+for(i in 1:length(mine))
+{
+	mymeta[[ref.names[i]]] <- ref[[i]]$meta
+}
+plotCovarDistance(seq1.meta, mymeta, cols)
+plotCovarQQ(seq1.meta, mymeta, cols, plot.ncols=4)
+# overlap histograms
+
+print(plotCovarHistogramsOverlap(seq1.meta,seq2.meta, cols, plot.ncols=4, main="pool"))
+for(i in 1:length(mine))
+{
+	print(plotCovarHistogramsOverlap(seq1.meta, ref[[i]]$meta, cols, plot.ncols=4, main=mine[i]))
+}
+dev.off()
+
+# FIMO RUNS: build adjusted pvalue matrix
+ref.results <- foreach(i=1:length(mine)) %dopar%
+{
+	print(paste("Testing ",mine[i],sep=""))
+	myTesting(ref.names[i], ref[[i]])
+}
+
+
+#HEATMAP
+library(gplots)
+
+val <- as.numeric(ref.results[[1]]$p.adj)
+val2 <- -log10(val)
+val2[val2=="Inf"] <- max(val2[val2!="Inf"])
+
+mat <- matrix(val2)
+for(i in 2:length(mine))
+{
+	val <- as.numeric(ref.results[[i]]$p.adj)
+	val2 <- -log10(val)
+	val2[val2=="Inf"] <- max(val2[val2!="Inf"])
+
+	mat <- cbind(mat,val2)
+}
+rownames(mat) <- ref.results[[1]]$motif
+colnames(mat) <- ref.names
+
+pdf(file="output/heattest.poolsubsamples.pdf", width=10.5, height=8, paper="USr")
+#png(filename="output/tmp.png",width=1400,height=800,res=120)
+hm <- heatmap.2(mat, key=T, keysize=1.5, trace="none",cexCol=1.2, labRow=NA, col=colorRampPalette(brewer.pal(9,"Blues")), main="Heatmap of -log10(adj p)",labCol=seq(1,ncol(mat)))
+data.frame(column=seq(1,ncol(mat)),model=colnames(mat))
+dev.off()
 
 # =============================================================================
