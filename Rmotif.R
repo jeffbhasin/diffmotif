@@ -13,9 +13,10 @@ library(foreach)
 library(stringr)
 library(ggplot2)
 library(gridExtra)
-library(Matching)
+library(Matching) # for Match()
 library(rms)
 library(doMC)
+library(gplots) # for heatmap.2()
 
 ###############################################
 ## Local Dependencies
@@ -68,9 +69,9 @@ getGC <- function(seq)
 ###############################################
 ## MEME Suite Interaction
 ###############################################
-runFIMO <- function(runname,fasta.path,motifs.path)
+runFIMO <- function(out.path,fasta.path,motifs.path)
 {
-	system(paste("fimo -oc output/fimo_out_",runname," ",motifs.path," ",fasta.path,sep=""))
+	system(paste("fimo -oc ",out.path," ",motifs.path," ",fasta.path,sep=""))
 }
 
 readFIMO <- function(fimo.out.path)
@@ -189,7 +190,34 @@ drawBackgroundSetFromRegions <- function(seq,regions,nSimSeqs=10000,windowSize=5
 # Use propensity score matching to create a background set
 # Input: formula to match by
 # Output: DNAStringSet of propensity matched background sequences
-drawBackgroundSetPropensity <- function(target.seq, target.meta, pool.seq, pool.meta, formula)
+drawBackgroundSetPropensity <- function(target.seq, target.meta, pool.seq, pool.meta, formula, start.order)
+{
+	# setting binary value for group assignment
+	target.meta$treat <- 1
+	pool.meta$treat <- 0
+	all.meta <- rbind(target.meta, pool.meta)
+
+	# randomize sort order - order can bias when Match(..., replace=FALSE)
+	all.meta.shuffle <- all.meta[start.order,]
+
+	# run logistic model
+	lrm.out <- lrm(formula, data=all.meta.shuffle)
+
+	# obtain values
+	lrm.out.fitted <- predict.lrm(lrm.out,type="fitted")
+
+	# match
+	rr <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.fitted, M=1, version="standard", replace=FALSE)
+	#summary(rr)
+
+	# make new sequence set
+	matched.meta <- all.meta.shuffle[rr$index.control,]
+	m <- match(as.character(matched.meta$name),names(pool.seq))
+	seq.resamp <- pool.seq[m]
+}
+# -----------------------------------------------------------------------------
+
+drawBackgroundSetPropensityGenMatch <- function(target.seq, target.meta, pool.seq, pool.meta, formula)
 {
 	# setting binary value for group assignment
 	target.meta$treat <- 1
@@ -215,7 +243,6 @@ drawBackgroundSetPropensity <- function(target.seq, target.meta, pool.seq, pool.
 	m <- match(as.character(matched.meta$name),names(pool.seq))
 	seq.resamp <- pool.seq[m]
 }
-# -----------------------------------------------------------------------------
 
 ###############################################
 ## Background Sequence Generators by Shuffles
@@ -626,12 +653,17 @@ plotCovarDistance <- function(orig.meta,list.meta,cols)
 	plot.data <- melt(dists)
 	names(plot.data) <- c("matching","variable","stddist")
 
-	mylevs <- levels(reorder(x=plot.data[plot.data$matching=="pool",]$variable,X=plot.data[plot.data$matching=="pool",]$stddist, order=FALSE))
+	plot.data.sub <- plot.data[plot.data$matching=="pool",]
+	plot.data.sub$variable <- as.character(plot.data.sub$variable)
+	mylevs <- plot.data.sub[sort(plot.data.sub$stddist, index.return=TRUE)$ix,]$variable
 
-	plot.data$variable <- factor(plot.data$variable,levels=mylevs)
+	#mylevs <- levels(reorder(x=plot.data[plot.data$matching=="pool",]$variable,X=plot.data[plot.data$matching=="pool",]$stddist, order=FALSE))
+
 	plot.data$matching <- factor(plot.data$matching,levels=names(list.meta))
 
-	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="mean(group 1)+mean(group 2))/stdev(group 1 union group 2)") + scale_colour_manual(values = genColors(length(list.meta)))
+	plot.data$variable <- factor(plot.data$variable,levels=mylevs)
+
+	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="mean(group 1)-mean(group 2))/stdev(group 1 union group 2)") + scale_colour_manual(values = genColors(length(list.meta)))
 }
 # -----------------------------------------------------------------------------
 
