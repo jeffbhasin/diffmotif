@@ -17,6 +17,7 @@ library(Matching) # for Match()
 library(rms)
 library(doMC)
 library(gplots) # for heatmap.2()
+library(VennDiagram)
 
 ###############################################
 ## Local Dependencies
@@ -220,28 +221,31 @@ drawBackgroundSetPropensity <- function(target.seq, target.meta, pool.seq, pool.
 drawBackgroundSetPropensityGenMatch <- function(target.seq, target.meta, pool.seq, pool.meta, formula)
 {
 	# setting binary value for group assignment
-	target.meta$treat <- 1
-	pool.meta$treat <- 0
-	all.meta <- rbind(target.meta, pool.meta)
+	#target.meta$treat <- 1
+	#pool.meta$treat <- 0
+	#all.meta <- rbind(target.meta, pool.meta)
 
 	# randomize sort order - order can bias when Match(..., replace=FALSE)
-	index.random <- sample(seq(1:nrow(all.meta)),nrow(all.meta), replace=FALSE)
-	all.meta.shuffle <- all.meta[index.random,]
+	#index.random <- sample(seq(1:nrow(all.meta)),nrow(all.meta), replace=FALSE)
+	#all.meta.shuffle <- all.meta[index.random,]
+	#all.meta.shuffle <- all.meta
 
 	# run logistic model
-	lrm.out <- lrm(formula, data=all.meta.shuffle)
+	#lrm.out <- lrm(formula, data=all.meta.shuffle)
 
 	# obtain values
-	lrm.out.fitted <- predict.lrm(lrm.out,type="fitted")
+	#lrm.out.fitted <- predict.lrm(lrm.out,type="fitted")
+
+	#genout <- GenMatch(Tr=all.meta.shuffle$treat, X=lrm.out.fitted, BalanceMatrix=lrm.out.fitted, estimand="ATE", M=1, pop.size=16, max.generations=10, wait.generations=1)
 
 	# match
-	rr <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.fitted, M=1, version="fast", replace=FALSE)
+	#rr <- Match(Y=NULL, Tr=all.meta.shuffle$treat, X=lrm.out.fitted, M=1, version="fast", replace=FALSE)
 	#summary(rr)
 
 	# make new sequence set
-	matched.meta <- all.meta.shuffle[rr$index.control,]
-	m <- match(as.character(matched.meta$name),names(pool.seq))
-	seq.resamp <- pool.seq[m]
+	#matched.meta <- all.meta.shuffle[rr$index.control,]
+	#m <- match(as.character(matched.meta$name),names(pool.seq))
+	#seq.resamp <- pool.seq[m]
 }
 
 ###############################################
@@ -636,7 +640,8 @@ plotCovarDistance <- function(orig.meta,list.meta,cols)
 {
 	stddist <- function(d1, d2)
 	{
-		(mean(d1)-mean(d2))/sd(c(d1,d2))
+		#(mean(d1)-mean(d2))/(sd(c(d1,d2))/2)
+		(100*abs(mean(d1)-mean(d2)))/sqrt(((sd(d1)^2)+(sd(d2)^2))/2)
 	}
 
 	# calculate distances for each variable
@@ -663,7 +668,7 @@ plotCovarDistance <- function(orig.meta,list.meta,cols)
 
 	plot.data$variable <- factor(plot.data$variable,levels=mylevs)
 
-	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="mean(group 1)-mean(group 2))/stdev(group 1 union group 2)") + scale_colour_manual(values = genColors(length(list.meta)))
+	ggplot(plot.data, aes(x=variable,y=stddist,col=matching)) + geom_point(data=plot.data,size=3) + theme(panel.grid.major.x = element_blank(), panel.grid.major.y = element_line(linetype=3, colour="grey50"), panel.grid.minor = element_blank(), panel.background = element_blank(), legend.key.size = unit(0.8, "lines"), axis.line = element_line(colour = "grey50"), axis.text=element_text(colour="black")) + geom_abline(intercept=0,slope=0,col="grey50") + coord_flip() + labs(main="Covariate Balance",y="Standardized Distance") + scale_colour_manual(values = genColors(length(list.meta)))
 }
 # -----------------------------------------------------------------------------
 

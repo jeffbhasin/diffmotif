@@ -143,7 +143,9 @@ seq2 <- seq2.unfiltered[(seq2.unfiltered.size<=max(seq1.meta$size))&(seq2.unfilt
 seq2.nSeqs <- length(seq2)
 
 # calculate covars of reference pool
-seq2.meta <- mySeqMeta(seq2)
+#seq2.meta <- mySeqMeta(seq2)
+#save(seq2.meta,file="output/propensity/seq2.meta.Rd")
+load("output/propensity/seq2.meta.Rd")
 
 # set which cols have covars in them
 cols <- 5:ncol(seq1.meta)
